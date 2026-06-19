@@ -17,9 +17,18 @@ pub fn generate_rust(program: &Program) -> String {
 fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
     let pad = "    ".repeat(indent);
     match stmt {
-        Statement::VarDecl { name, typ, init } => {
+        Statement::VarDecl {
+            name,
+            is_mut,
+            typ,
+            init,
+        } => {
             out.push_str(&pad);
-            out.push_str("let ");
+            if *is_mut {
+                out.push_str("let mut ");
+            } else {
+                out.push_str("let ");
+            }
             out.push_str(name);
             if let Some(t) = typ {
                 out.push_str(": ");

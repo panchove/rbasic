@@ -553,7 +553,9 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
         current_ret_type: Option<&Type>,
     ) {
         match stmt {
-            Statement::VarDecl { name, typ, init } => {
+            Statement::VarDecl {
+                name, typ, init, ..
+            } => {
                 let init_type = resolve_expr(init, locals, globals, functions, errors);
                 if let Some(ref t) = typ {
                     if Type::from_name(&t.name).is_none() {

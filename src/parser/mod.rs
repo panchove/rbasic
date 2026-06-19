@@ -122,10 +122,12 @@ impl Parser {
 
     fn var_decl(&mut self) -> Result<Statement, ParseError> {
         self.expect(TokenKind::Let, "expected LET")?;
-        // optional mut is ignored for now
-        if self.peek().kind == TokenKind::Mut {
+        let is_mut = if self.peek().kind == TokenKind::Mut {
             self.advance();
-        }
+            true
+        } else {
+            false
+        };
         let name = if let TokenKind::Identifier(s) = self.advance().kind {
             s
         } else {
@@ -141,7 +143,12 @@ impl Parser {
         };
         self.expect(TokenKind::Assign, "expected '=' in variable declaration")?;
         let init = self.expression()?;
-        Ok(Statement::VarDecl { name, typ, init })
+        Ok(Statement::VarDecl {
+            name,
+            is_mut,
+            typ,
+            init,
+        })
     }
 
     fn dim_stmt(&mut self) -> Result<Statement, ParseError> {

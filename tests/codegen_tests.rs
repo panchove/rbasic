@@ -22,6 +22,19 @@ mod tests {
     }
 
     #[test]
+    fn test_let_mut() {
+        let out = compile("LET MUT x: I32 = 0");
+        assert!(out.contains("let mut x: i32 = 0;"));
+    }
+
+    #[test]
+    fn test_let_immutable() {
+        let out = compile("LET x: I32 = 0");
+        assert!(out.contains("let x: i32 = 0;"));
+        assert!(!out.contains("let mut"));
+    }
+
+    #[test]
     fn test_u8_decl() {
         let out = compile("LET x: U8 = 10");
         assert!(out.contains("let x: u8 = 10;"));

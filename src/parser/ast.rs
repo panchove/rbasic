@@ -7,6 +7,7 @@ pub struct Program {
 pub enum Statement {
     VarDecl {
         name: String,
+        is_mut: bool,
         typ: Option<TypeRef>,
         init: Expression,
     },
