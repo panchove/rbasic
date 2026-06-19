@@ -8,7 +8,7 @@ mod tests {
 
     fn compile_file(path: &str) -> String {
         let source = fs::read_to_string(path).expect("read example");
-        let tokens = rbasic::lex(&source);
+        let (tokens, _) = rbasic::lex(&source);
         let mut parser = rbasic::Parser::new(tokens);
         let prog = parser.parse_program().expect("parse");
         assert!(rbasic::analyze(&prog).is_ok(), "semantic analysis failed");

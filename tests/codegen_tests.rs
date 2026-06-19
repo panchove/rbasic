@@ -3,7 +3,7 @@ mod tests {
     use rbasic::{generate_rust, lex, Parser};
 
     fn compile(src: &str) -> String {
-        let tokens = lex(src);
+        let (tokens, _) = lex(src);
         let mut parser = Parser::new(tokens);
         let prog = parser.parse_program().expect("parse error");
         generate_rust(&prog)

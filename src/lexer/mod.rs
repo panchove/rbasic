@@ -1,20 +1,12 @@
 pub mod token;
 
-use token::{Span, Token, TokenKind};
+use token::{LexError, LexErrorCode, Span, Token, TokenKind};
 
-/// Very simple lexer sufficient for the current test suite.
-/// It tokenises identifiers, integer literals, keywords, and the
-/// punctuation required by the parser (colon, comma, parentheses,
-/// arithmetic operators, assignment, comparison operators and the
-/// `END`/`IF`/`WHILE`/`FUNCTION`/`LET`/`PRINT`/`RETURN` keywords).
-///
-/// The implementation is deliberately straightforward – it scans the
-/// input byte‑by‑byte, builds tokens and records their span (start‑
-/// inclusive, end‑exclusive). Only the token kinds needed by the
-/// parser are produced; any unrecognised character is ignored.
-pub fn lex(input: &str) -> Vec<Token> {
+pub fn lex(input: &str) -> (Vec<Token>, Vec<LexError>) {
     let mut tokens = Vec::new();
+    let mut errors = Vec::new();
     let mut chars = input.char_indices().peekable();
+
     while let Some((start, ch)) = chars.next() {
         // Skip whitespace
         if ch.is_whitespace() {
@@ -29,7 +21,7 @@ pub fn lex(input: &str) -> Vec<Token> {
             }
             continue;
         }
-        // Simple single‑character tokens
+        // Simple single-character tokens
         let kind = match ch {
             '+' => TokenKind::Plus,
             '-' => TokenKind::Minus,
@@ -42,9 +34,8 @@ pub fn lex(input: &str) -> Vec<Token> {
             '(' => TokenKind::LParen,
             ')' => TokenKind::RParen,
             '=' => {
-                // Could be "==" or "="; look ahead
                 if let Some('=') = chars.peek().map(|(_, c)| *c) {
-                    chars.next(); // consume second '='
+                    chars.next();
                     TokenKind::EqualEqual
                 } else {
                     TokenKind::Assign
@@ -55,7 +46,11 @@ pub fn lex(input: &str) -> Vec<Token> {
                     chars.next();
                     TokenKind::NotEqual
                 } else {
-                    // unsupported token, skip
+                    errors.push(LexError {
+                        code: LexErrorCode::InvalidChar,
+                        message: "invalid character '!' (did you mean '!='?)".to_string(),
+                        span: Span::new(start, start + 1),
+                    });
                     continue;
                 }
             }
@@ -76,40 +71,71 @@ pub fn lex(input: &str) -> Vec<Token> {
                 }
             }
             '"' => {
-                // string literal until next quote
                 let mut s = String::new();
+                let mut terminated = false;
                 for (_, c) in chars.by_ref() {
                     if c == '"' {
+                        terminated = true;
                         break;
                     }
                     s.push(c);
                 }
+                if !terminated {
+                    errors.push(LexError {
+                        code: LexErrorCode::UnterminatedString,
+                        message: format!("unterminated string literal starting with \"{}\"", s),
+                        span: Span::new(start, input.len()),
+                    });
+                    continue;
+                }
                 let len = s.len();
                 tokens.push(Token {
-                    kind: TokenKind::StringLit(s.clone()),
+                    kind: TokenKind::StringLit(s),
                     span: Span::new(start, start + 1 + len + 1),
                 });
                 continue;
             }
             c if c.is_ascii_digit() => {
-                // Number literal: may be int or float
                 let mut num = c.to_string();
                 let mut end = start + c.len_utf8();
                 let mut is_float = false;
+                let mut invalid = false;
                 while let Some(&(idx, nxt)) = chars.peek() {
                     if nxt.is_ascii_digit() {
                         num.push(nxt);
                         end = idx + nxt.len_utf8();
                         chars.next();
                     } else if nxt == '.' && !is_float {
-                        // start of fractional part
                         is_float = true;
                         num.push('.');
                         end = idx + nxt.len_utf8();
                         chars.next();
+                    } else if nxt == '.' && is_float {
+                        // Second decimal point: invalid number
+                        invalid = true;
+                        end = idx + nxt.len_utf8();
+                        chars.next();
+                        // consume remainder of the malformed literal
+                        while let Some(&(idx2, nxt2)) = chars.peek() {
+                            if nxt2.is_ascii_digit() || nxt2 == '.' {
+                                end = idx2 + nxt2.len_utf8();
+                                chars.next();
+                            } else {
+                                break;
+                            }
+                        }
+                        break;
                     } else {
                         break;
                     }
+                }
+                if invalid {
+                    errors.push(LexError {
+                        code: LexErrorCode::InvalidNumber,
+                        message: format!("invalid numeric literal '{}'", num),
+                        span: Span::new(start, end),
+                    });
+                    continue;
                 }
                 if is_float {
                     let value = num.parse::<f64>().unwrap_or(0.0);
@@ -127,7 +153,15 @@ pub fn lex(input: &str) -> Vec<Token> {
                 continue;
             }
             _ => {
-                // identifiers / keywords and boolean literals
+                // Identifiers and keywords must start with a letter or underscore
+                if !ch.is_ascii_alphabetic() && ch != '_' {
+                    errors.push(LexError {
+                        code: LexErrorCode::InvalidChar,
+                        message: format!("invalid character '{}'", ch),
+                        span: Span::new(start, start + ch.len_utf8()),
+                    });
+                    continue;
+                }
                 let mut ident = String::new();
                 ident.push(ch);
                 let mut end = start + ch.len_utf8();
@@ -140,7 +174,7 @@ pub fn lex(input: &str) -> Vec<Token> {
                         break;
                     }
                 }
-                // Check for boolean literals (case‑insensitive)
+                // Boolean literals (case-insensitive)
                 match ident.to_ascii_uppercase().as_str() {
                     "TRUE" => {
                         tokens.push(Token {
@@ -158,7 +192,7 @@ pub fn lex(input: &str) -> Vec<Token> {
                     }
                     _ => {}
                 }
-                // Match other keywords (case‑insensitive)
+                // Keywords (case-insensitive)
                 let kind = match ident.to_ascii_uppercase().as_str() {
                     "AND" => TokenKind::And,
                     "OR" => TokenKind::Or,
@@ -192,16 +226,13 @@ pub fn lex(input: &str) -> Vec<Token> {
                     "SHR" => TokenKind::Shr,
                     _ => TokenKind::Identifier(ident),
                 };
-                let token = Token {
+                tokens.push(Token {
                     kind,
                     span: Span::new(start, end),
-                };
-                tokens.push(token);
+                });
                 continue;
             }
         };
-        // For the identifier/keyword branch we need custom handling, handled above.
-        // We'll reconstruct token for non‑identifier kinds.
         let end = start + ch.len_utf8();
         tokens.push(Token {
             kind,
@@ -212,5 +243,5 @@ pub fn lex(input: &str) -> Vec<Token> {
         kind: TokenKind::Eof,
         span: Span::new(input.len(), input.len()),
     });
-    tokens
+    (tokens, errors)
 }

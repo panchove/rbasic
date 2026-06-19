@@ -6,7 +6,8 @@ mod tests {
     use rbasic::Statement;
 
     fn lex(input: &str) -> Vec<Token> {
-        lexer::lex(input)
+        let (tokens, _) = lexer::lex(input);
+        tokens
     }
 
     #[test]

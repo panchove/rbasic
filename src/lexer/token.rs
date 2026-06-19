@@ -1,5 +1,19 @@
 use std::fmt;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LexErrorCode {
+    InvalidChar,
+    UnterminatedString,
+    InvalidNumber,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LexError {
+    pub code: LexErrorCode,
+    pub message: String,
+    pub span: Span,
+}
+
 /// Position in the source code (byte offset).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Span {

@@ -48,7 +48,16 @@ fn main() {
 }
 
 fn compile_to_rust(source: &str, path: &str) -> String {
-    let tokens = lex(source);
+    let (tokens, lex_errors) = lex(source);
+    if !lex_errors.is_empty() {
+        for e in &lex_errors {
+            eprintln!(
+                "{}:{}:{}: Lex error [{:?}]: {}",
+                path, e.span.start, e.span.end, e.code, e.message
+            );
+        }
+        process::exit(1);
+    }
     let mut parser = Parser::new(tokens);
     let prog = match parser.parse_program() {
         Ok(p) => p,

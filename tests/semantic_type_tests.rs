@@ -7,7 +7,7 @@ mod tests {
     };
 
     fn parse(src: &str) -> Program {
-        let tokens = lexer::lex(src);
+        let (tokens, _) = lexer::lex(src);
         let mut parser = Parser::new(tokens);
         parser.parse_program().expect("parse error")
     }
