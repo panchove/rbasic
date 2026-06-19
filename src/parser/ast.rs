@@ -46,6 +46,15 @@ pub enum Statement {
         ret_type: Option<TypeRef>,
         body: Vec<Statement>,
     },
+    Dim {
+        declarations: Vec<ArrayDecl>,
+    },
+    OnError {
+        label: String,
+    },
+    Resume {
+        label: Option<String>,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -93,24 +102,26 @@ pub enum UnaryOp {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-    pub enum BinaryOp {
-        Add,
-        Sub,
-        Mul,
-        Div,
-        Pow,
-        IntDiv,
-        Mod,
-        Eq,
-        NotEq,
-        Lt,
-        Lte,
-        Gt,
-        Gte,
-        And,
-        Or,
-        Xor,
-    }
+pub enum BinaryOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Pow,
+    IntDiv,
+    Mod,
+    Eq,
+    NotEq,
+    Lt,
+    Lte,
+    Gt,
+    Gte,
+    And,
+    Or,
+    Xor,
+    Shl, // Shift left
+    Shr, // Shift right
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum DoLoopVariant {
@@ -123,4 +134,17 @@ pub enum DoLoopVariant {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TypeRef {
     pub name: String,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ArrayType {
+    pub base_type: Box<TypeRef>,
+    pub dimensions: Vec<Expression>, // Array sizes
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ArrayDecl {
+    pub name: String,
+    pub array_type: ArrayType,
+    pub init: Option<Expression>, // Optional initialization
 }

@@ -34,12 +34,18 @@ pub enum TokenKind {
     Step,
     Do,
     Loop,
-        Until,
-        As,
-        And,
-        Or,
-        Xor,
-
+    Until,
+    As,
+    And,
+    Or,
+    Xor,
+    Dim,
+    On,
+    Error,
+    Goto,
+    Resume,
+    Shl, // Shift left
+    Shr, // Shift right
 
     // Literals
     Identifier(String),
@@ -118,6 +124,13 @@ impl fmt::Display for TokenKind {
             And => "AND",
             Or => "OR",
             Xor => "XOR",
+            Dim => "DIM",
+            On => "ON",
+            Error => "ERROR",
+            Goto => "GOTO",
+            Resume => "RESUME",
+            Shl => "SHL",
+            Shr => "SHR",
             Assign => "=",
             EqualEqual => "==",
             NotEqual => "!=",

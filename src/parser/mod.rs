@@ -65,6 +65,7 @@ impl Parser {
         match self.peek().kind {
             TokenKind::Function => self.function_decl(),
             TokenKind::Let => self.var_decl(),
+            TokenKind::Dim => self.dim_stmt(),
             _ => self.statement(),
         }
     }
@@ -143,6 +144,82 @@ impl Parser {
         Ok(Statement::VarDecl { name, typ, init })
     }
 
+    fn dim_stmt(&mut self) -> Result<Statement, ParseError> {
+        self.expect(TokenKind::Dim, "expected DIM")?;
+        let mut declarations = Vec::new();
+        loop {
+            let name = if let TokenKind::Identifier(s) = self.advance().kind {
+                s
+            } else {
+                return Err(ParseError {
+                    message: "expected array name after DIM".into(),
+                    span: self.peek().span,
+                });
+            };
+            self.expect(TokenKind::LParen, "expected '(' after array name")?;
+            let mut dimensions = Vec::new();
+            loop {
+                let dim_expr = self.expression()?;
+                dimensions.push(dim_expr);
+                if self.match_kind(TokenKind::Comma) {
+                    continue;
+                } else {
+                    break;
+                }
+            }
+            self.expect(TokenKind::RParen, "expected ')' after array dimensions")?;
+            let base_type = TypeRef {
+                name: "INTEGER".to_string(),
+            }; // Default type
+            let array_type = ArrayType {
+                base_type: Box::new(base_type),
+                dimensions,
+            };
+            declarations.push(ArrayDecl {
+                name,
+                array_type,
+                init: None,
+            });
+            if !self.match_kind(TokenKind::Comma) {
+                break;
+            }
+        }
+        Ok(Statement::Dim { declarations })
+    }
+
+    fn on_error_stmt(&mut self) -> Result<Statement, ParseError> {
+        self.expect(TokenKind::On, "expected ON")?;
+        self.expect(TokenKind::Error, "expected ERROR")?;
+        self.expect(TokenKind::Goto, "expected GOTO")?;
+        let label = if let TokenKind::Identifier(s) = self.advance().kind {
+            s
+        } else {
+            return Err(ParseError {
+                message: "expected error label after ON ERROR GOTO".into(),
+                span: self.peek().span,
+            });
+        };
+        Ok(Statement::OnError { label })
+    }
+
+    fn resume_stmt(&mut self) -> Result<Statement, ParseError> {
+        self.expect(TokenKind::Resume, "expected RESUME")?;
+        let label = if matches!(self.peek().kind, TokenKind::Identifier(_)) {
+            let label_str = if let TokenKind::Identifier(s) = self.advance().kind {
+                s
+            } else {
+                return Err(ParseError {
+                    message: "expected label after RESUME".into(),
+                    span: self.peek().span,
+                });
+            };
+            Some(label_str)
+        } else {
+            None
+        };
+        Ok(Statement::Resume { label })
+    }
+
     fn type_ref(&mut self) -> Result<TypeRef, ParseError> {
         if let TokenKind::Identifier(s) = self.advance().kind {
             Ok(TypeRef { name: s })
@@ -183,6 +260,8 @@ impl Parser {
             TokenKind::While => self.while_stmt(),
             TokenKind::For => self.for_stmt(),
             TokenKind::Do => self.do_stmt(),
+            TokenKind::On => self.on_error_stmt(),
+            TokenKind::Resume => self.resume_stmt(),
             _ => {
                 let expr = self.expression()?;
                 Ok(Statement::ExpressionStmt { expr })
@@ -353,14 +432,28 @@ impl Parser {
     }
 
     fn logical_or(&mut self) -> Result<Expression, ParseError> {
-        let mut expr = self.equality()?;
-        while matches!(self.peek().kind, TokenKind::Or | TokenKind::And | TokenKind::Xor) {
+        let mut expr = self.logical_and()?;
+        while matches!(self.peek().kind, TokenKind::Or | TokenKind::Xor) {
             let op = match self.advance().kind {
                 TokenKind::Or => BinaryOp::Or,
-                TokenKind::And => BinaryOp::And,
                 TokenKind::Xor => BinaryOp::Xor,
                 _ => unreachable!(),
             };
+            let right = self.logical_and()?;
+            expr = Expression::Binary {
+                left: Box::new(expr),
+                op,
+                right: Box::new(right),
+            };
+        }
+        Ok(expr)
+    }
+
+    fn logical_and(&mut self) -> Result<Expression, ParseError> {
+        let mut expr = self.equality()?;
+        while self.peek().kind == TokenKind::And {
+            let op = BinaryOp::And;
+            self.advance();
             let right = self.equality()?;
             expr = Expression::Binary {
                 left: Box::new(expr),
@@ -444,6 +537,20 @@ impl Parser {
                 TokenKind::Slash => BinaryOp::Div,
                 TokenKind::Backslash => BinaryOp::IntDiv,
                 TokenKind::Mod => BinaryOp::Mod,
+                _ => unreachable!(),
+            };
+            let right = self.power()?;
+            expr = Expression::Binary {
+                left: Box::new(expr),
+                op,
+                right: Box::new(right),
+            };
+        }
+        // Bit shift operators
+        while matches!(self.peek().kind, TokenKind::Shl | TokenKind::Shr) {
+            let op = match self.advance().kind {
+                TokenKind::Shl => BinaryOp::Shl,
+                TokenKind::Shr => BinaryOp::Shr,
                 _ => unreachable!(),
             };
             let right = self.power()?;

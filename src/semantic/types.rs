@@ -17,17 +17,17 @@ pub enum Type {
 impl Type {
     pub fn from_name(name: &str) -> Option<Type> {
         match name.to_uppercase().as_str() {
-            "BOOL" => Some(Type::Bool),
+            "BOOL" | "BOOLEAN" => Some(Type::Bool),
+            "INTEGER" | "I32" => Some(Type::I32),
+            "LONG" | "I64" => Some(Type::I64),
+            "SINGLE" | "F32" => Some(Type::F32),
+            "DOUBLE" | "F64" => Some(Type::F64),
+            "BYTE" | "U8" => Some(Type::U8),
             "I8" => Some(Type::I8),
             "I16" => Some(Type::I16),
-            "I32" => Some(Type::I32),
-            "I64" => Some(Type::I64),
-            "U8" => Some(Type::U8),
             "U16" => Some(Type::U16),
             "U32" => Some(Type::U32),
             "U64" => Some(Type::U64),
-            "F32" => Some(Type::F32),
-            "F64" => Some(Type::F64),
             "STRING" => Some(Type::String),
             _ => None,
         }

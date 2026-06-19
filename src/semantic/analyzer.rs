@@ -32,23 +32,112 @@ fn types_compatible(expected: &Type, actual: &Type) -> bool {
             return true;
         }
     }
-    // Existing logic ...
-    // Add string concatenation compatibility
-    if *expected == Type::String && *actual == Type::String {
-        return true;
-    }
+    // Float widening
     if *expected == Type::F64 && *actual == Type::F32 {
         return true;
     }
     if *expected == Type::F32 && *actual == Type::F64 {
         return true;
     }
+    // String concatenation compatibility
+    if *expected == Type::String && *actual == Type::String {
+        return true;
+    }
     false
 }
 
-/// Returns true if an explicit `AS` cast from `from` to `to` is valid.
+/// Checks if a binary operation between two types is valid.
+fn binary_op_valid(op: &BinaryOp, left: &Type, right: &Type) -> bool {
+    match op {
+        BinaryOp::Add
+        | BinaryOp::Sub
+        | BinaryOp::Mul
+        | BinaryOp::Div
+        | BinaryOp::IntDiv
+        | BinaryOp::Mod => {
+            // Integer operations
+            if left.is_integer() && right.is_integer() {
+                if left.is_signed() != right.is_signed() {
+                    return false; // E1020: signed/unsigned mismatch
+                }
+                return true;
+            }
+            // Float operations
+            if left.is_numeric() && right.is_numeric() {
+                if left.is_integer() != right.is_integer() {
+                    return false; // E1021: cross-family
+                }
+                return true;
+            }
+            // String concatenation
+            if left == &Type::String && right == &Type::String {
+                return true;
+            }
+            // Boolean logic
+            if left == &Type::Bool && right == &Type::Bool {
+                return true;
+            }
+            false
+        }
+        BinaryOp::Pow => {
+            // Power operation requires numeric types
+            if left.is_numeric() && right.is_numeric() {
+                return true;
+            }
+            false
+        }
+        BinaryOp::Eq
+        | BinaryOp::NotEq
+        | BinaryOp::Lt
+        | BinaryOp::Lte
+        | BinaryOp::Gt
+        | BinaryOp::Gte => {
+            // Comparison operations require compatible types
+            if left.is_numeric() && right.is_numeric() {
+                return true;
+            }
+            if left == &Type::String && right == &Type::String {
+                return true;
+            }
+            if left == &Type::Bool && right == &Type::Bool {
+                return true;
+            }
+            false
+        }
+        BinaryOp::And | BinaryOp::Or | BinaryOp::Xor => {
+            // Logical operations require boolean types
+            if left == &Type::Bool && right == &Type::Bool {
+                return true;
+            }
+            false
+        }
+        BinaryOp::Shl | BinaryOp::Shr => {
+            // Bit shift operations require integer types
+            if left.is_integer() && right.is_integer() {
+                return true;
+            }
+            false
+        }
+    }
+}
+
+/// Checks if an explicit AS cast between two types is valid.
 fn can_cast_explicitly(from: &Type, to: &Type) -> bool {
     from.is_numeric() && to.is_numeric()
+}
+
+/// Checks if a unary operation on a type is valid.
+fn unary_op_valid(op: &UnaryOp, operand: &Type) -> bool {
+    match op {
+        UnaryOp::Neg => {
+            // Negative operation: only signed integers and floats
+            operand.is_numeric() && !operand.is_unsigned()
+        }
+        UnaryOp::Not => {
+            // Logical NOT requires boolean type
+            operand == &Type::Bool
+        }
+    }
 }
 
 struct FuncSig {
@@ -63,6 +152,7 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
     let mut functions: HashMap<String, FuncSig> = HashMap::new();
     // Track global variable types and whether they're declared
     let mut globals: HashMap<String, Type> = HashMap::new();
+    // ON ERROR / RESUME labels are tracked at runtime; no semantic validation in v0.1.
 
     // Helper: push error
     fn err(errors: &mut Vec<SemanticError>, code: SemanticErrorCode, msg: String) {
@@ -77,15 +167,6 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
     for stmt in &prog.statements {
         match stmt {
             Statement::VarDecl { name, typ, .. } => {
-                if let Some(t) = typ {
-                    if Type::from_name(&t.name).is_none() {
-                        err(
-                            &mut errors,
-                            SemanticErrorCode::E1010,
-                            format!("Unknown type {}", t.name),
-                        );
-                    }
-                }
                 let key = name.to_lowercase();
                 if let std::collections::hash_map::Entry::Vacant(e) = globals.entry(key) {
                     let resolved = typ
@@ -189,94 +270,115 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
             Expression::Unary { op, expr } => {
                 let inner = resolve_expr(expr, locals, globals, functions, errors);
                 match (op, &inner) {
-                    (UnaryOp::Neg, Some(Type::I8)) => Some(Type::I8),
-                    (UnaryOp::Neg, Some(Type::I16)) => Some(Type::I16),
-                    (UnaryOp::Neg, Some(Type::I32)) => Some(Type::I32),
-                    (UnaryOp::Neg, Some(Type::I64)) => Some(Type::I64),
-                    (UnaryOp::Neg, Some(Type::F32)) => Some(Type::F32),
-                    (UnaryOp::Neg, Some(Type::F64)) => Some(Type::F64),
-                    (UnaryOp::Not, Some(Type::Bool)) => Some(Type::Bool),
                     (_, None) => None,
-                    _ => {
-                        let op_str = match op {
-                            UnaryOp::Neg => "-",
-                            UnaryOp::Not => "NOT",
-                        };
-                        let type_str = inner.as_ref().map(|t| t.to_rust_str()).unwrap_or("unknown");
-                        err(
-                            errors,
-                            SemanticErrorCode::E1022,
-                            format!("Invalid unary operation '{}' on type {}", op_str, type_str),
-                        );
-                        None
+                    (op, Some(typ)) => {
+                        if unary_op_valid(op, typ) {
+                            match op {
+                                UnaryOp::Neg => Some(typ.clone()),
+                                UnaryOp::Not => Some(Type::Bool),
+                            }
+                        } else {
+                            let op_str = match op {
+                                UnaryOp::Neg => "-",
+                                UnaryOp::Not => "NOT",
+                            };
+                            let type_str = typ.to_rust_str();
+                            err(
+                                errors,
+                                SemanticErrorCode::E1022,
+                                format!(
+                                    "Invalid unary operation '{}' on type {}",
+                                    op_str, type_str
+                                ),
+                            );
+                            None
+                        }
                     }
                 }
             }
             Expression::Binary { left, op, right } => {
                 let l = resolve_expr(left, locals, globals, functions, errors);
                 let r = resolve_expr(right, locals, globals, functions, errors);
-                // Integer-integer operations use automatic widening
-                'typecheck: {
-                    if let (Some(ref lt), Some(ref rt)) = (&l, &r) {
-                        if lt.is_integer() && rt.is_integer() && lt.is_signed() == rt.is_signed() {
-                            break 'typecheck Some(match op {
-                                BinaryOp::Add
-                                | BinaryOp::Sub
-                                | BinaryOp::Mul
-                                | BinaryOp::Div
-                                | BinaryOp::IntDiv
-                                | BinaryOp::Mod => Type::widen_int(lt, rt),
-                                BinaryOp::Pow => Type::F64,
-                                BinaryOp::Eq
-                                | BinaryOp::NotEq
-                                | BinaryOp::Lt
-                                | BinaryOp::Lte
-                                | BinaryOp::Gt
-                                | BinaryOp::Gte => Type::Bool,
-                            });
-                        }
-                        // Logical operations on BOOL
-                        if *lt == Type::Bool && *rt == Type::Bool {
-                            break 'typecheck Some(match op {
-                                BinaryOp::And | BinaryOp::Or | BinaryOp::Xor => Type::Bool,
-                                _ => Type::Bool,
-                            });
-                        }
-                            match op {
-                                BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => {
-                                    let result = if *lt == Type::F64 || *rt == Type::F64 {
-                                        Type::F64
-                                    } else {
-                                        Type::F32
-                                    };
-                                    break 'typecheck Some(result);
-                                }
-                                BinaryOp::Pow => break 'typecheck Some(Type::F64),
-                                BinaryOp::Eq
-                                | BinaryOp::NotEq
-                                | BinaryOp::Lt
-                                | BinaryOp::Lte
-                                | BinaryOp::Gt
-                                | BinaryOp::Gte => break 'typecheck Some(Type::Bool),
-                                _ => {} // IntDiv, Mod — fall through to error
+                match (op, &l, &r) {
+                    (_, None, _) | (_, _, None) => None,
+                    (op, Some(ref lt), Some(ref rt)) => {
+                        if binary_op_valid(op, lt, rt) {
+                            // Integer-integer operations use automatic widening
+                            if lt.is_integer()
+                                && rt.is_integer()
+                                && lt.is_signed() == rt.is_signed()
+                            {
+                                return Some(match op {
+                                    BinaryOp::Add
+                                    | BinaryOp::Sub
+                                    | BinaryOp::Mul
+                                    | BinaryOp::Div
+                                    | BinaryOp::IntDiv
+                                    | BinaryOp::Mod => Type::widen_int(lt, rt),
+                                    BinaryOp::Pow => Type::F64,
+                                    BinaryOp::Eq
+                                    | BinaryOp::NotEq
+                                    | BinaryOp::Lt
+                                    | BinaryOp::Lte
+                                    | BinaryOp::Gt
+                                    | BinaryOp::Gte => Type::Bool,
+                                    _ => unreachable!(),
+                                });
                             }
-                        }
-                    }
-                    match (op, &l, &r) {
-                        // String concatenation
-                        (BinaryOp::Add, Some(Type::String), Some(Type::String)) => Some(Type::String),
-                        // Logical AND/OR/XOR on BOOL
-                        (BinaryOp::And, Some(Type::Bool), Some(Type::Bool)) => Some(Type::Bool),
-                        (BinaryOp::Or, Some(Type::Bool), Some(Type::Bool)) => Some(Type::Bool),
-                        (BinaryOp::Xor, Some(Type::Bool), Some(Type::Bool)) => Some(Type::Bool),
-                        (BinaryOp::NotEq, Some(Type::String), Some(Type::String)) => {
-                            Some(Type::Bool)
-                        }
-                        (BinaryOp::Eq, Some(Type::Bool), Some(Type::Bool)) => Some(Type::Bool),
-                        (BinaryOp::NotEq, Some(Type::Bool), Some(Type::Bool)) => Some(Type::Bool),
-                        // Invalid
-                        (_, None, _) | (_, _, None) => None,
-                        _ => {
+
+                            // Logical operations on BOOL
+                            if *lt == Type::Bool && *rt == Type::Bool {
+                                return Some(match op {
+                                    BinaryOp::And | BinaryOp::Or | BinaryOp::Xor => Type::Bool,
+                                    _ => Type::Bool,
+                                });
+                            }
+
+                            // Other numeric/float operations
+                            if lt.is_numeric()
+                                && rt.is_numeric()
+                                && !(lt.is_integer()
+                                    && rt.is_integer()
+                                    && lt.is_signed() != rt.is_signed())
+                            {
+                                match op {
+                                    BinaryOp::Add
+                                    | BinaryOp::Sub
+                                    | BinaryOp::Mul
+                                    | BinaryOp::Div => {
+                                        let result = if *lt == Type::F64 || *rt == Type::F64 {
+                                            Type::F64
+                                        } else {
+                                            Type::F32
+                                        };
+                                        return Some(result);
+                                    }
+                                    BinaryOp::Pow => return Some(Type::F64),
+                                    BinaryOp::Eq
+                                    | BinaryOp::NotEq
+                                    | BinaryOp::Lt
+                                    | BinaryOp::Lte
+                                    | BinaryOp::Gt
+                                    | BinaryOp::Gte => return Some(Type::Bool),
+
+                                    _ => {} // IntDiv, Mod — fall through to error
+                                }
+                            }
+
+                            // String concatenation
+                            if *lt == Type::String && *rt == Type::String {
+                                return Some(Type::String);
+                            }
+
+                            // Bit shift operations
+                            if lt.is_integer() && rt.is_integer() {
+                                match op {
+                                    BinaryOp::Shl | BinaryOp::Shr => return Some(lt.clone()),
+                                    _ => {}
+                                }
+                            }
+
+                            // This should not happen if binary_op_valid returned true
                             let op_str = match op {
                                 BinaryOp::Add => "+",
                                 BinaryOp::Sub => "-",
@@ -285,25 +387,76 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                                 BinaryOp::Pow => "^",
                                 BinaryOp::IntDiv => "\\",
                                 BinaryOp::Mod => "MOD",
-                                BinaryOp::Eq => "==",
-                                BinaryOp::NotEq => "!=",
+                                BinaryOp::Eq => "=",
+                                BinaryOp::NotEq => "<>",
                                 BinaryOp::Lt => "<",
                                 BinaryOp::Lte => "<=",
                                 BinaryOp::Gt => ">",
+                                BinaryOp::Gte => ">=",
                                 BinaryOp::And => "AND",
-                            BinaryOp::Or => "OR",
-                            BinaryOp::Xor => "XOR",
+                                BinaryOp::Or => "OR",
+                                BinaryOp::Xor => "XOR",
+                                BinaryOp::Shl => "SHL",
+                                BinaryOp::Shr => "SHR",
                             };
-                            let l_str = l.as_ref().map(|t| t.to_rust_str()).unwrap_or("?");
-                            let r_str = r.as_ref().map(|t| t.to_rust_str()).unwrap_or("?");
+                            let left_str = lt.to_rust_str();
+                            let right_str = rt.to_rust_str();
                             err(
                                 errors,
                                 SemanticErrorCode::E1021,
                                 format!(
-                                    "Invalid binary operation '{}' between {} and {}",
-                                    op_str, l_str, r_str
+                                    "Invalid operation '{}' between {} and {}",
+                                    op_str, left_str, right_str
                                 ),
                             );
+                            None
+                        } else {
+                            // Binary operation is invalid
+                            let op_str = match op {
+                                BinaryOp::Add => "+",
+                                BinaryOp::Sub => "-",
+                                BinaryOp::Mul => "*",
+                                BinaryOp::Div => "/",
+                                BinaryOp::Pow => "^",
+                                BinaryOp::IntDiv => "\\",
+                                BinaryOp::Mod => "MOD",
+                                BinaryOp::Eq => "=",
+                                BinaryOp::NotEq => "<>",
+                                BinaryOp::Lt => "<",
+                                BinaryOp::Lte => "<=",
+                                BinaryOp::Gt => ">",
+                                BinaryOp::Gte => ">=",
+                                BinaryOp::And => "AND",
+                                BinaryOp::Or => "OR",
+                                BinaryOp::Xor => "XOR",
+                                BinaryOp::Shl => "SHL",
+                                BinaryOp::Shr => "SHR",
+                            };
+                            let left_str = lt.to_rust_str();
+                            let right_str = rt.to_rust_str();
+                            // Determine specific error code
+                            if lt.is_integer()
+                                && rt.is_integer()
+                                && lt.is_signed() != rt.is_signed()
+                            {
+                                err(
+                                    errors,
+                                    SemanticErrorCode::E1021,
+                                    format!(
+                                        "Signed/unsigned type mismatch in operation '{}'",
+                                        op_str
+                                    ),
+                                );
+                            } else {
+                                err(
+                                    errors,
+                                    SemanticErrorCode::E1021,
+                                    format!(
+                                        "Invalid operation '{}' between {} and {}",
+                                        op_str, left_str, right_str
+                                    ),
+                                );
+                            }
                             None
                         }
                     }
@@ -402,6 +555,15 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
         match stmt {
             Statement::VarDecl { name, typ, init } => {
                 let init_type = resolve_expr(init, locals, globals, functions, errors);
+                if let Some(ref t) = typ {
+                    if Type::from_name(&t.name).is_none() {
+                        err(
+                            errors,
+                            SemanticErrorCode::E1010,
+                            format!("Unknown type {}", t.name),
+                        );
+                    }
+                }
                 let declared = typ.as_ref().and_then(|t| Type::from_name(&t.name));
                 // Type mismatch check
                 if let (Some(d), Some(a)) = (&declared, &init_type) {
@@ -650,6 +812,28 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                         ret_type.as_ref(),
                     );
                 }
+            }
+            Statement::Dim { declarations } => {
+                for decl in declarations {
+                    let base_type =
+                        Type::from_name(&decl.array_type.base_type.name).unwrap_or(Type::I32);
+                    let key = decl.name.to_lowercase();
+                    if let std::collections::hash_map::Entry::Vacant(e) = locals.entry(key) {
+                        e.insert(base_type);
+                    } else {
+                        err(
+                            errors,
+                            SemanticErrorCode::E1003,
+                            format!("Duplicate array variable {}", decl.name),
+                        );
+                    }
+                }
+            }
+            Statement::OnError { .. } => {
+                // ON ERROR GOTO — no semantic validation in v0.1
+            }
+            Statement::Resume { .. } => {
+                // RESUME — no semantic validation in v0.1
             }
         }
     }

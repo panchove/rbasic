@@ -174,6 +174,13 @@ pub fn lex(input: &str) -> Vec<Token> {
                     "UNTIL" => TokenKind::Until,
                     "AS" => TokenKind::As,
                     "MOD" => TokenKind::Mod,
+                    "DIM" => TokenKind::Dim,
+                    "ON" => TokenKind::On,
+                    "ERROR" => TokenKind::Error,
+                    "GOTO" => TokenKind::Goto,
+                    "RESUME" => TokenKind::Resume,
+                    "SHL" => TokenKind::Shl,
+                    "SHR" => TokenKind::Shr,
                     _ => TokenKind::Identifier(ident),
                 };
                 let token = Token {

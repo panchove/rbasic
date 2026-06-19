@@ -247,6 +247,10 @@ fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
             out.push_str(&pad);
             out.push_str("}\n");
         }
+        // v0.2 features — no codegen in v0.1
+        Statement::Dim { .. } => {}
+        Statement::OnError { .. } => {}
+        Statement::Resume { .. } => {}
     }
 }
 
@@ -305,6 +309,8 @@ fn gen_expr(expr: &Expression, out: &mut String) {
                     BinaryOp::And => " && ",
                     BinaryOp::Or => " || ",
                     BinaryOp::Xor => " ^ ",
+                    BinaryOp::Shl => " << ",
+                    BinaryOp::Shr => " >> ",
                 };
                 gen_expr(left, out);
                 out.push_str(op_str);
