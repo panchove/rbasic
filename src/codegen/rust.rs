@@ -1,0 +1,365 @@
+use std::fmt::Write;
+
+use crate::parser::ast::{
+    BinaryOp, DoLoopVariant, Expression, Literal, Program, Statement, UnaryOp,
+};
+use crate::semantic::types::Type;
+
+pub fn generate_rust(program: &Program) -> String {
+    let mut out = String::from("fn main() {\n");
+    for stmt in &program.statements {
+        gen_stmt(stmt, &mut out, 1);
+    }
+    out.push_str("}\n");
+    out
+}
+
+fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
+    let pad = "    ".repeat(indent);
+    match stmt {
+        Statement::VarDecl { name, typ, init } => {
+            out.push_str(&pad);
+            out.push_str("let ");
+            out.push_str(name);
+            if let Some(t) = typ {
+                out.push_str(": ");
+                out.push_str(&type_to_rust(&t.name));
+            }
+            out.push_str(" = ");
+            gen_expr(init, out);
+            out.push_str(";\n");
+        }
+        Statement::Print { expr } => {
+            out.push_str(&pad);
+            out.push_str("println!(\"{}\", ");
+            gen_expr(expr, out);
+            out.push_str(");\n");
+        }
+        Statement::Return { expr } => {
+            out.push_str(&pad);
+            out.push_str("return");
+            if let Some(e) = expr {
+                out.push(' ');
+                gen_expr(e, out);
+            }
+            out.push_str(";\n");
+        }
+        Statement::If {
+            condition,
+            then_branch,
+            else_branch,
+        } => {
+            out.push_str(&pad);
+            out.push_str("if ");
+            gen_expr(condition, out);
+            out.push_str(" {\n");
+            for s in then_branch {
+                gen_stmt(s, out, indent + 1);
+            }
+            if let Some(else_branch) = else_branch {
+                out.push_str(&pad);
+                out.push_str("} else {\n");
+                for s in else_branch {
+                    gen_stmt(s, out, indent + 1);
+                }
+            }
+            out.push_str(&pad);
+            out.push_str("}\n");
+        }
+        Statement::While { condition, body } => {
+            out.push_str(&pad);
+            out.push_str("while ");
+            gen_expr(condition, out);
+            out.push_str(" {\n");
+            for s in body {
+                gen_stmt(s, out, indent + 1);
+            }
+            out.push_str(&pad);
+            out.push_str("}\n");
+        }
+        Statement::For {
+            var,
+            start,
+            end,
+            step,
+            body,
+        } => {
+            out.push_str(&pad);
+            out.push_str("{\n");
+            let inner = "    ".repeat(indent + 1);
+            out.push_str(&inner);
+            out.push_str("let mut ");
+            out.push_str(var);
+            out.push_str(" = ");
+            gen_expr(start, out);
+            out.push_str(";\n");
+            if let Some(step_expr) = step {
+                out.push_str(&inner);
+                out.push_str("let step = ");
+                gen_expr(step_expr, out);
+                out.push_str(";\n");
+                out.push_str(&inner);
+                out.push_str("if step >= 0 {\n");
+                out.push_str(&"    ".repeat(indent + 2));
+                out.push_str("while ");
+                out.push_str(var);
+                out.push_str(" <= ");
+                gen_expr(end, out);
+                out.push_str(" {\n");
+                for s in body {
+                    gen_stmt(s, out, indent + 3);
+                }
+                out.push_str(&"    ".repeat(indent + 2));
+                out.push_str("    ");
+                out.push_str(var);
+                out.push_str(" += step;\n");
+                out.push_str(&"    ".repeat(indent + 2));
+                out.push_str("}\n");
+                out.push_str(&inner);
+                out.push_str("} else {\n");
+                out.push_str(&"    ".repeat(indent + 2));
+                out.push_str("while ");
+                out.push_str(var);
+                out.push_str(" >= ");
+                gen_expr(end, out);
+                out.push_str(" {\n");
+                for s in body {
+                    gen_stmt(s, out, indent + 3);
+                }
+                out.push_str(&"    ".repeat(indent + 2));
+                out.push_str("    ");
+                out.push_str(var);
+                out.push_str(" += step;\n");
+                out.push_str(&"    ".repeat(indent + 2));
+                out.push_str("}\n");
+                out.push_str(&inner);
+                out.push_str("}\n");
+            } else {
+                out.push_str(&inner);
+                out.push_str("while ");
+                out.push_str(var);
+                out.push_str(" <= ");
+                gen_expr(end, out);
+                out.push_str(" {\n");
+                for s in body {
+                    gen_stmt(s, out, indent + 2);
+                }
+                out.push_str(&inner);
+                out.push_str("    ");
+                out.push_str(var);
+                out.push_str(" += 1;\n");
+                out.push_str(&inner);
+                out.push_str("}\n");
+            }
+            out.push_str(&pad);
+            out.push_str("}\n");
+        }
+        Statement::DoLoop {
+            variant,
+            condition,
+            body,
+        } => match (variant, condition) {
+            (DoLoopVariant::WhilePre, Some(cond)) => {
+                out.push_str(&pad);
+                out.push_str("while ");
+                gen_expr(cond, out);
+                out.push_str(" {\n");
+                for s in body {
+                    gen_stmt(s, out, indent + 1);
+                }
+                out.push_str(&pad);
+                out.push_str("}\n");
+            }
+            (DoLoopVariant::UntilPre, Some(cond)) => {
+                out.push_str(&pad);
+                out.push_str("while !(");
+                gen_expr(cond, out);
+                out.push_str(") {\n");
+                for s in body {
+                    gen_stmt(s, out, indent + 1);
+                }
+                out.push_str(&pad);
+                out.push_str("}\n");
+            }
+            (DoLoopVariant::WhilePost, Some(cond)) => {
+                out.push_str(&pad);
+                out.push_str("loop {\n");
+                for s in body {
+                    gen_stmt(s, out, indent + 1);
+                }
+                out.push_str(&"    ".repeat(indent));
+                out.push_str("    if !(");
+                gen_expr(cond, out);
+                out.push_str(") { break; }\n");
+                out.push_str(&pad);
+                out.push_str("}\n");
+            }
+            (DoLoopVariant::UntilPost, Some(cond)) => {
+                out.push_str(&pad);
+                out.push_str("loop {\n");
+                for s in body {
+                    gen_stmt(s, out, indent + 1);
+                }
+                out.push_str(&"    ".repeat(indent));
+                out.push_str("    if ");
+                gen_expr(cond, out);
+                out.push_str(" { break; }\n");
+                out.push_str(&pad);
+                out.push_str("}\n");
+            }
+            _ => {
+                out.push_str(&pad);
+                out.push_str("// unreachable: DO loop without condition\n");
+            }
+        },
+        Statement::ExpressionStmt { expr } => {
+            out.push_str(&pad);
+            gen_expr(expr, out);
+            out.push_str(";\n");
+        }
+        Statement::FunctionDecl {
+            name,
+            params,
+            ret_type,
+            body,
+        } => {
+            out.push_str(&pad);
+            out.push_str("fn ");
+            out.push_str(name);
+            out.push('(');
+            for (i, p) in params.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                out.push_str(&p.name);
+                out.push_str(": ");
+                out.push_str(&type_to_rust(&p.typ.name));
+            }
+            out.push(')');
+            if let Some(rt) = ret_type {
+                out.push_str(" -> ");
+                out.push_str(&type_to_rust(&rt.name));
+            }
+            out.push_str(" {\n");
+            for s in body {
+                gen_stmt(s, out, indent + 1);
+            }
+            out.push_str(&pad);
+            out.push_str("}\n");
+        }
+    }
+}
+
+fn gen_expr(expr: &Expression, out: &mut String) {
+    match expr {
+        Expression::Literal(lit) => match lit {
+            Literal::Int(v) => out.push_str(&v.to_string()),
+            Literal::Float(v) => {
+                let s = v.to_string();
+                if !s.contains('.') {
+                    write!(out, "{}.0", s).unwrap();
+                } else {
+                    out.push_str(&s);
+                }
+            }
+            Literal::String(s) => {
+                out.push('"');
+                out.push_str(&escape_string(s));
+                out.push('"');
+            }
+            Literal::Bool(v) => out.push_str(if *v { "true" } else { "false" }),
+        },
+        Expression::Identifier(name) => out.push_str(name),
+        Expression::Unary { op, expr } => {
+            let op_str = match op {
+                UnaryOp::Neg => "-",
+                UnaryOp::Not => "!",
+            };
+            out.push_str(op_str);
+            out.push('(');
+            gen_expr(expr, out);
+            out.push(')');
+        }
+        Expression::Binary { left, op, right } => {
+            if *op == BinaryOp::Pow {
+                out.push_str("((");
+                gen_expr(left, out);
+                out.push_str(" as f64).powf(");
+                gen_expr(right, out);
+                out.push_str(" as f64))");
+            } else {
+                let op_str = match op {
+                    BinaryOp::Add => " + ",
+                    BinaryOp::Sub => " - ",
+                    BinaryOp::Mul => " * ",
+                    BinaryOp::Div => " / ",
+                    BinaryOp::Pow => unreachable!(),
+                    BinaryOp::IntDiv => " / ",
+                    BinaryOp::Mod => " % ",
+                    BinaryOp::Eq => " == ",
+                    BinaryOp::NotEq => " != ",
+                    BinaryOp::Lt => " < ",
+                    BinaryOp::Lte => " <= ",
+                    BinaryOp::Gt => " > ",
+                    BinaryOp::Gte => " >= ",
+                    BinaryOp::And => " && ",
+                    BinaryOp::Or => " || ",
+                    BinaryOp::Xor => " ^ ",
+                };
+                gen_expr(left, out);
+                out.push_str(op_str);
+                gen_expr(right, out);
+            }
+        }
+        Expression::Grouping(inner) => {
+            out.push('(');
+            gen_expr(inner, out);
+            out.push(')');
+        }
+        Expression::Cast { expr, target_type } => {
+            gen_expr(expr, out);
+            let target = Type::from_name(target_type)
+                .map(|t| t.to_rust_str().to_string())
+                .unwrap_or_else(|| target_type.to_lowercase());
+            out.push_str(" as ");
+            out.push_str(&target);
+        }
+        Expression::Call { callee, args } => {
+            out.push_str(callee);
+            out.push('(');
+            for (i, a) in args.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                gen_expr(a, out);
+            }
+            out.push(')');
+        }
+    }
+}
+
+fn type_to_rust(name: &str) -> String {
+    match name.to_uppercase().as_str() {
+        "BOOL" => "bool".to_string(),
+        "I8" => "i8".to_string(),
+        "I16" => "i16".to_string(),
+        "I32" => "i32".to_string(),
+        "I64" => "i64".to_string(),
+        "U8" => "u8".to_string(),
+        "U16" => "u16".to_string(),
+        "U32" => "u32".to_string(),
+        "U64" => "u64".to_string(),
+        "F32" => "f32".to_string(),
+        "F64" => "f64".to_string(),
+        "STRING" => "String".to_string(),
+        _ => name.to_string(),
+    }
+}
+
+fn escape_string(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
+}

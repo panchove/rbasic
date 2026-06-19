@@ -1,0 +1,11 @@
+FUNCTION fibonacci(n: I32) RETURNS I32
+    IF n <= 1 THEN
+        RETURN n
+    ELSE
+        RETURN fibonacci(n - 1) + fibonacci(n - 2)
+    END IF
+END FUNCTION
+
+FOR i = 1 TO 20
+    PRINT fibonacci(i)
+END FOR

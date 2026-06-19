@@ -1,0 +1,6 @@
+FUNCTION add(a: i32, b: i32) RETURNS i32
+    RETURN a + b
+END FUNCTION
+
+LET result: i32 = add(10, 20)
+PRINT result

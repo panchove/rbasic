@@ -1,0 +1,19 @@
+FUNCTION fizzbuzz(n: I32)
+    IF n / 15 * 15 == n THEN
+        PRINT "FizzBuzz"
+    ELSE
+        IF n / 5 * 5 == n THEN
+            PRINT "Buzz"
+        ELSE
+            IF n / 3 * 3 == n THEN
+                PRINT "Fizz"
+            ELSE
+                PRINT n
+            END IF
+        END IF
+    END IF
+END FUNCTION
+
+FOR i = 1 TO 100
+    fizzbuzz(i)
+END FOR
