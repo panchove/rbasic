@@ -121,4 +121,64 @@ END FOR
         let mut parser = Parser::new(tokens);
         assert!(parser.parse_program().is_err());
     }
+
+    #[test]
+    fn test_let_mut_is_tracked() {
+        let src = "LET MUT counter: I32 = 0";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::VarDecl { is_mut, name, .. } => {
+                assert!(is_mut, "expected is_mut = true for LET MUT");
+                assert_eq!(name, "counter");
+            }
+            _ => panic!("expected VarDecl"),
+        }
+    }
+
+    #[test]
+    fn test_let_immutable_is_tracked() {
+        let src = "LET value: I32 = 42";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::VarDecl { is_mut, .. } => {
+                assert!(!is_mut, "expected is_mut = false for plain LET");
+            }
+            _ => panic!("expected VarDecl"),
+        }
+    }
+
+    #[test]
+    fn test_return_no_expr() {
+        let src = "FUNCTION Reset()\n    RETURN\nEND FUNCTION";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::FunctionDecl { body, .. } => match &body[0] {
+                Statement::Return { expr } => assert!(expr.is_none()),
+                _ => panic!("expected Return"),
+            },
+            _ => panic!("expected FunctionDecl"),
+        }
+    }
+
+    #[test]
+    fn test_nested_if() {
+        let src = "IF a THEN\n    IF b THEN\n        PRINT 1\n    END IF\nEND IF";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        assert_eq!(prog.statements.len(), 1);
+        match &prog.statements[0] {
+            Statement::If { then_branch, .. } => {
+                assert_eq!(then_branch.len(), 1);
+                assert!(matches!(then_branch[0], Statement::If { .. }));
+            }
+            _ => panic!("expected If"),
+        }
+    }
 }

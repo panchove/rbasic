@@ -81,4 +81,35 @@ mod tests {
         assert_eq!(lines[4], "Buzz");
         assert_eq!(lines[14], "FizzBuzz");
     }
+
+    #[test]
+    fn for_step_example() {
+        let out = run_compiled("examples/for_step.rbas");
+        let nums: Vec<i32> = out.lines().map(|l| l.trim().parse().unwrap()).collect();
+        assert_eq!(nums, vec![1, 3, 5, 7, 9]);
+    }
+
+    #[test]
+    fn operators_example() {
+        let out = run_compiled("examples/operators.rbas");
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines.len(), 4);
+        assert_eq!(lines[0], "8"); // 2 ^ 3
+        assert_eq!(lines[1], "1"); // 10 MOD 3
+        assert_eq!(lines[2], "2"); // 7 \ 3
+        assert_eq!(lines[3], "4"); // (10 MOD 4) * 2
+    }
+
+    #[test]
+    fn comments_do_not_affect_execution() {
+        // Inline source with comments — must compile and run correctly
+        let source = "'header comment\nPRINT 42 ' inline\n' trailing";
+        let (tokens, lex_errors) = rbasic::lex(source);
+        assert!(lex_errors.is_empty());
+        let mut parser = rbasic::Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse");
+        assert!(rbasic::analyze(&prog).is_ok());
+        let rust = rbasic::generate_rust(&prog);
+        assert!(rust.contains("42"));
+    }
 }

@@ -85,4 +85,43 @@ mod tests {
         let (_, errors) = lex(src);
         assert!(errors.is_empty());
     }
+
+    #[test]
+    fn keywords_case_insensitive() {
+        use rbasic::lexer::lex;
+        let (lower, _) = lex("let mut function return if then else end while print");
+        let (upper, _) = lex("LET MUT FUNCTION RETURN IF THEN ELSE END WHILE PRINT");
+        let lower_kinds: Vec<_> = lower.iter().map(|t| &t.kind).collect();
+        let upper_kinds: Vec<_> = upper.iter().map(|t| &t.kind).collect();
+        assert_eq!(lower_kinds, upper_kinds);
+    }
+
+    #[test]
+    fn lone_exclamation_is_invalid() {
+        let (_, errors) = lex("LET x = !5");
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].code, LexErrorCode::InvalidChar);
+    }
+
+    #[test]
+    fn valid_float_literal() {
+        let (tokens, errors) = lex("1.5");
+        assert!(errors.is_empty());
+        assert!(matches!(tokens[0].kind, TokenKind::Float(f) if (f - 1.5).abs() < 1e-9));
+    }
+
+    #[test]
+    fn integer_literal() {
+        let (tokens, errors) = lex("42");
+        assert!(errors.is_empty());
+        assert!(matches!(tokens[0].kind, TokenKind::Int(42)));
+    }
+
+    #[test]
+    fn string_with_escapes() {
+        // The lexer stores the raw content; escapes are handled at codegen
+        let (tokens, errors) = lex(r#""hello\nworld""#);
+        assert!(errors.is_empty());
+        assert!(matches!(&tokens[0].kind, TokenKind::StringLit(s) if s.contains("\\n")));
+    }
 }

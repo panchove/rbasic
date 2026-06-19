@@ -96,4 +96,25 @@ mod tests {
             "LET GlobalValue: I32 = 1\n\nFUNCTION Test()\n    PRINT GlobalValue\nEND FUNCTION";
         assert!(analyze_src(src).is_ok());
     }
+
+    #[test]
+    fn local_shadows_global() {
+        // A local variable with the same name as a global is allowed
+        let src =
+            "LET x: I32 = 10\nFUNCTION Test()\n    LET x: I32 = 99\n    PRINT x\nEND FUNCTION";
+        assert!(analyze_src(src).is_ok());
+    }
+
+    #[test]
+    fn comment_in_source_is_accepted() {
+        // Comments must not cause parse or semantic errors
+        let src = "' this is a comment\nLET value: I32 = 5 ' inline\nPRINT value";
+        assert!(analyze_src(src).is_ok());
+    }
+
+    #[test]
+    fn let_mut_accepted_by_analyzer() {
+        let src = "LET MUT counter: I32 = 0\nPRINT counter";
+        assert!(analyze_src(src).is_ok());
+    }
 }

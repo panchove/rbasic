@@ -257,4 +257,29 @@ END WHILE
         let out = compile("PRINT (100 AS I8) AS I32");
         assert!(out.contains("(100 as i8) as i32"));
     }
+
+    #[test]
+    fn test_shl() {
+        let out = compile("LET a: I32 = 1\nLET b: I32 = 1 SHL a");
+        assert!(out.contains("<<"));
+    }
+
+    #[test]
+    fn test_shr() {
+        let out = compile("LET a: I32 = 8\nLET b: I32 = a SHR 1");
+        assert!(out.contains(">>"));
+    }
+
+    #[test]
+    fn test_xor() {
+        let out = compile("LET a: I32 = 1\nLET b: I32 = a XOR 0");
+        assert!(out.contains(" ^ "));
+    }
+
+    #[test]
+    fn test_function_no_return_type() {
+        let out = compile("FUNCTION greet()\n    PRINT \"hi\"\nEND FUNCTION");
+        assert!(out.contains("fn greet()"));
+        assert!(!out.contains("->"));
+    }
 }
