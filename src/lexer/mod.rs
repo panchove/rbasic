@@ -20,6 +20,15 @@ pub fn lex(input: &str) -> Vec<Token> {
         if ch.is_whitespace() {
             continue;
         }
+        // Single-line comment: skip everything until end of line
+        if ch == '\'' {
+            for (_, c) in chars.by_ref() {
+                if c == '\n' {
+                    break;
+                }
+            }
+            continue;
+        }
         // Simple single‑character tokens
         let kind = match ch {
             '+' => TokenKind::Plus,
