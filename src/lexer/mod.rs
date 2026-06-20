@@ -73,12 +73,48 @@ pub fn lex(input: &str) -> (Vec<Token>, Vec<LexError>) {
             '"' => {
                 let mut s = String::new();
                 let mut terminated = false;
-                for (_, c) in chars.by_ref() {
-                    if c == '"' {
-                        terminated = true;
-                        break;
+                let mut end_pos = start + 1;
+                loop {
+                    match chars.next() {
+                        None => break,
+                        Some((idx, '"')) => {
+                            terminated = true;
+                            end_pos = idx + 1;
+                            break;
+                        }
+                        Some((_, '\\')) => match chars.next() {
+                            Some((idx, '\\')) => {
+                                s.push('\\');
+                                end_pos = idx + 1;
+                            }
+                            Some((idx, '"')) => {
+                                s.push('"');
+                                end_pos = idx + 1;
+                            }
+                            Some((idx, 'n')) => {
+                                s.push('\n');
+                                end_pos = idx + 1;
+                            }
+                            Some((idx, 'r')) => {
+                                s.push('\r');
+                                end_pos = idx + 1;
+                            }
+                            Some((idx, 't')) => {
+                                s.push('\t');
+                                end_pos = idx + 1;
+                            }
+                            Some((idx, c)) => {
+                                s.push('\\');
+                                s.push(c);
+                                end_pos = idx + c.len_utf8();
+                            }
+                            None => break,
+                        },
+                        Some((idx, c)) => {
+                            s.push(c);
+                            end_pos = idx + c.len_utf8();
+                        }
                     }
-                    s.push(c);
                 }
                 if !terminated {
                     errors.push(LexError {
@@ -88,10 +124,9 @@ pub fn lex(input: &str) -> (Vec<Token>, Vec<LexError>) {
                     });
                     continue;
                 }
-                let len = s.len();
                 tokens.push(Token {
                     kind: TokenKind::StringLit(s),
-                    span: Span::new(start, start + 1 + len + 1),
+                    span: Span::new(start, end_pos),
                 });
                 continue;
             }

@@ -119,9 +119,30 @@ mod tests {
 
     #[test]
     fn string_with_escapes() {
-        // The lexer stores the raw content; escapes are handled at codegen
+        // \n in source becomes an actual newline char in the stored token
         let (tokens, errors) = lex(r#""hello\nworld""#);
         assert!(errors.is_empty());
-        assert!(matches!(&tokens[0].kind, TokenKind::StringLit(s) if s.contains("\\n")));
+        assert!(matches!(&tokens[0].kind, TokenKind::StringLit(s) if s.contains('\n')));
+    }
+
+    #[test]
+    fn string_escape_tab() {
+        let (tokens, errors) = lex(r#""col1\tcol2""#);
+        assert!(errors.is_empty());
+        assert!(matches!(&tokens[0].kind, TokenKind::StringLit(s) if s.contains('\t')));
+    }
+
+    #[test]
+    fn string_escape_backslash() {
+        let (tokens, errors) = lex(r#""C:\\path""#);
+        assert!(errors.is_empty());
+        assert!(matches!(&tokens[0].kind, TokenKind::StringLit(s) if s.contains('\\')));
+    }
+
+    #[test]
+    fn string_escape_quote() {
+        let (tokens, errors) = lex(r#""say \"hi\"""#);
+        assert!(errors.is_empty());
+        assert!(matches!(&tokens[0].kind, TokenKind::StringLit(s) if s.contains('"')));
     }
 }

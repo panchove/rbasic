@@ -8,6 +8,7 @@ The format is based on Keep a Changelog.
 
 ### Added
 - Explicit AS cast syntax: `expr AS TypeName` for numeric type conversions (i8, i16, i32, i64, u8, u16, u32, u64, f32, f64)
+- String escape sequences processed in the lexer: `\\`, `\"`, `\n`, `\r`, `\t` (RFC-0002 §11)
 
 ### Planned (v0.2)
 - Classic BASIC type aliases: `INTEGER`→I32, `LONG`→I64, `SINGLE`→F32, `DOUBLE`→F64, `BYTE`→U8, etc.
