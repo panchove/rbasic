@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SemanticErrorCode {
     E1001,
@@ -21,6 +23,12 @@ pub struct SemanticError {
     pub code: SemanticErrorCode,
     pub message: String,
     pub span: Option<(usize, usize)>,
+}
+
+impl fmt::Display for SemanticErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl PartialEq<&'static str> for SemanticErrorCode {

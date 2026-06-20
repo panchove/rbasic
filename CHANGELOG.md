@@ -9,6 +9,10 @@ The format is based on Keep a Changelog.
 ### Added
 - Explicit AS cast syntax: `expr AS TypeName` for numeric type conversions (i8, i16, i32, i64, u8, u16, u32, u64, f32, f64)
 - String escape sequences processed in the lexer: `\\`, `\"`, `\n`, `\r`, `\t` (RFC-0002 §11)
+- Structured lexer diagnostics with file, line, column, source snippet, and caret (RFC-0002 §17)
+- `diagnostics::format_lex_error` and `diagnostics::offset_to_line_col` exported from crate root
+- `Display` impl for `SemanticErrorCode` (clean `{}` formatting)
+- Parse and semantic errors in the CLI now report `line:column` instead of byte offsets
 
 ### Planned (v0.2)
 - Classic BASIC type aliases: `INTEGER`→I32, `LONG`→I64, `SINGLE`→F32, `DOUBLE`→F64, `BYTE`→U8, etc.

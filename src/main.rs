@@ -1,7 +1,7 @@
 use std::fs;
 use std::process;
 
-use rbasic::{analyze, generate_rust, lex, Parser};
+use rbasic::{analyze, format_lex_error, generate_rust, lex, offset_to_line_col, Parser};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -51,10 +51,7 @@ fn compile_to_rust(source: &str, path: &str) -> String {
     let (tokens, lex_errors) = lex(source);
     if !lex_errors.is_empty() {
         for e in &lex_errors {
-            eprintln!(
-                "{}:{}:{}: Lex error [{:?}]: {}",
-                path, e.span.start, e.span.end, e.code, e.message
-            );
+            eprintln!("{}", format_lex_error(e, source, path));
         }
         process::exit(1);
     }
@@ -62,20 +59,21 @@ fn compile_to_rust(source: &str, path: &str) -> String {
     let prog = match parser.parse_program() {
         Ok(p) => p,
         Err(e) => {
-            eprintln!(
-                "{}:{}:{}: Parse error: {}",
-                path, e.span.start, e.span.end, e.message
-            );
+            let (line, col) = offset_to_line_col(source, e.span.start);
+            eprintln!("error[P001] {}:{}:{}: {}", path, line, col, e.message);
             process::exit(1);
         }
     };
     if let Err(errors) = analyze(&prog) {
         for err in &errors {
-            let span = err
+            let loc = err
                 .span
-                .map(|(s, e)| format!(":{}:{}", s, e))
+                .map(|(s, _)| {
+                    let (line, col) = offset_to_line_col(source, s);
+                    format!(":{}:{}", line, col)
+                })
                 .unwrap_or_default();
-            eprintln!("{}{}: {:?} — {}", path, span, err.code, err.message);
+            eprintln!("error[{}] {}{}: {}", err.code, path, loc, err.message);
         }
         process::exit(1);
     }

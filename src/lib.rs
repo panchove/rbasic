@@ -5,6 +5,7 @@ pub mod parser;
 pub mod semantic;
 
 pub use codegen::rust::generate_rust;
+pub use diagnostics::{format_lex_error, offset_to_line_col};
 pub use lexer::{
     lex,
     token::{LexError, LexErrorCode, Token, TokenKind},
