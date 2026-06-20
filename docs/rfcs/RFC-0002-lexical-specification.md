@@ -496,7 +496,7 @@ Slash
 Assign
 
 EqualEqual
-BangEqual
+NotEqual
 
 Less
 LessEqual

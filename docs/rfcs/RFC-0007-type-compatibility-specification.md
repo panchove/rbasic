@@ -44,7 +44,7 @@ F64           ✗     ✗     ✓      ✗
 STRING        ✗     ✗     ✗      ✓
 ```
 
-RBASIC v0.1 uses **strict compatibility** – no implicit conversions.
+RBASIC v0.1 uses **strict compatibility** with one exception: integer literals and same-family integer types support implicit widening (see §4a).
 
 ## 5. Variable Initialization Rules
 
@@ -127,14 +127,26 @@ Each diagnostic must include:
 - Actual Type
 - Span (source location)
 
+## 4a. Implicit Integer Widening
+
+Within the same sign family, narrower integer types are implicitly compatible with wider ones:
+
+```
+Signed:   I8 → I16 → I32 → I64
+Unsigned: U8 → U16 → U32 → U64
+```
+
+An integer literal (`Literal::Int`) resolves as `I32` by default and is implicitly compatible with any integer type. Signed and unsigned types are **not** mutually compatible (produces `E1021`).
+
+F32 and F64 are mutually compatible (F32 widens to F64).
+
+Explicit cross-type casts use the `AS` keyword and are governed by `can_cast_explicitly()` in the semantic analyzer.
+
 ## 11. Future Compatibility
 
-No implicit conversions are permitted in v0.1. Future RFCs may introduce:
+Possible future additions:
 - I32 → F64 promotion
-- Explicit `CAST` operations
 - User‑defined conversions
-
-These are **not** part of RBASIC v0.1.
 
 ## 12. Acceptance Criteria
 
