@@ -350,21 +350,40 @@ FUNCTION add(a: i32, b: i32)
 The following words are reserved for future language evolution and SHALL NOT be used as identifiers:
 
 ```text
-NEXT
-MODULE
-IMPORT
-EXPORT
-TYPE
-ENUM
-STRUCT
-OPTIONAL
-RESULT
-REF
-MUTREF
-UNSAFE
+NEXT        — FOR loop termination (Phase 1)
+WEND        — WHILE loop termination (Phase 1)
+SELECT      — SELECT CASE (Phase 1)
+CASE        — SELECT CASE (Phase 1)
+SUB         — subroutine declaration (Phase 1)
+CALL        — subroutine invocation (Phase 1)
+OPTION      — OPTION EXPLICIT, OPTION BASE, OPTION IMPLICIT
+BASE        — OPTION BASE
+PUBLIC      — module visibility
+PRIVATE     — module visibility
+BYVAL       — pass by value
+BYREF       — pass by reference
+OPTIONAL    — optional parameter
+DECLARE     — C interop (Phase 2)
+DYNAMIC     — DECLARE DYNAMIC LIBRARY (Phase 2)
+LIBRARY     — DECLARE LIBRARY (Phase 2)
+ASYNC       — async task (Phase 2)
+AWAIT       — await task result (Phase 2)
+GO          — fire-and-forget task (Phase 2)
+MODULE      — module declaration (Phase 2)
+IMPORT      — module import (Phase 2)
+EXPORT      — module export (Phase 2)
+ENUM        — enumeration (Phase 2)
+TYPE        — user-defined type (Phase 1)
+STRUCT      — alias for TYPE (Phase 2)
+EVENTS      — DO EVENTS (Phase 1)
+REF         — strong reference (Phase 2)
+WEAK        — weak reference (Phase 2)
+UNSAFE      — unsafe operations (future)
+OPTIONAL    — generic optional type (Phase 3)
+RESULT      — generic result type (Phase 3)
 ```
 
-These words do not produce valid language constructs in v0.1.
+These words do not produce valid language constructs in their respective phases.
 
 ---
 
@@ -416,12 +435,23 @@ AND     — logical AND
 OR      — logical OR
 XOR     — logical XOR
 DIM     — array declaration
-ON      — ON ERROR GOTO
+ON      — ON ERROR GOTO, ON...GOTO
 ERROR   — ON ERROR GOTO
-GOTO    — ON ERROR GOTO
+GOTO    — ON ERROR GOTO, ON...GOTO, GOTO label
+GOSUB   — GOSUB subroutine
 RESUME  — error recovery
 SHL     — shift left
 SHR     — shift right
+ELSEIF  — IF...THEN...ELSEIF
+SELECT  — SELECT CASE
+CASE    — SELECT CASE
+NEXT    — FOR loop termination
+WEND    — WHILE loop termination
+SUB     — subroutine declaration
+CALL    — subroutine invocation
+EXIT    — EXIT FOR/WHILE/DO
+STOP    — program termination
+END     — program termination, block end
 ```
 
 **Extended operators** (beyond the core `+`, `-`, `*`, `/`):

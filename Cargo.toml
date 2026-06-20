@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 thiserror = "1"
+lazy_static = "1.4"
 
 [dev-dependencies]
 pretty_assertions = "1"

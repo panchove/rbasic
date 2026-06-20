@@ -213,19 +213,31 @@ impl Parser {
         Ok(Statement::OnError { label })
     }
 
-    fn input_stmt(&mut self) -> Result<Statement, ParseError> {
+    fn input_or_input_hash(&mut self) -> Result<Statement, ParseError> {
         self.expect(TokenKind::Input, "expected INPUT")?;
-        // Check for optional prompt string
+        // Check if this is INPUT# (file I/O)
+        if self.peek().kind == TokenKind::Hash {
+            self.advance(); // consume #
+            let handle = self.expression()?;
+            self.expect(TokenKind::Comma, "expected ',' after file handle")?;
+            let mut targets = Vec::new();
+            loop {
+                let target = self.expect_ident("expected variable name")?;
+                targets.push(target);
+                if !self.match_kind(TokenKind::Comma) {
+                    break;
+                }
+            }
+            return Ok(Statement::InputHash { handle, targets });
+        }
+        // Regular INPUT statement
         let (prompt, target) = if let TokenKind::StringLit(_) = self.peek().kind.clone() {
-            // Consume the string literal
             let prompt_str = if let TokenKind::StringLit(p) = self.advance().kind {
                 p
             } else {
                 unreachable!();
             };
-            // Expect comma
             self.expect(TokenKind::Comma, "expected ',' after INPUT prompt")?;
-            // Expect identifier for target
             let target_name = if let TokenKind::Identifier(name) = self.advance().kind {
                 name
             } else {
@@ -236,7 +248,6 @@ impl Parser {
             };
             (Some(prompt_str), target_name)
         } else {
-            // Expect identifier directly
             let target_name = if let TokenKind::Identifier(name) = self.advance().kind {
                 name
             } else {
@@ -248,6 +259,205 @@ impl Parser {
             (None, target_name)
         };
         Ok(Statement::Input { prompt, target })
+    }
+
+    fn open_stmt(&mut self) -> Result<Statement, ParseError> {
+        self.expect(TokenKind::Open, "expected OPEN")?;
+        let filename = self.expression()?;
+        self.expect(TokenKind::For, "expected FOR after filename")?;
+        let mode = match self.peek().kind {
+            TokenKind::Input => {
+                self.advance();
+                FileMode::Input
+            }
+            TokenKind::Identifier(ref s) if s.to_uppercase() == "OUTPUT" => {
+                self.advance();
+                FileMode::Output
+            }
+            TokenKind::Append => {
+                self.advance();
+                FileMode::Append
+            }
+            TokenKind::Random => {
+                self.advance();
+                FileMode::Random
+            }
+            TokenKind::Binary => {
+                self.advance();
+                FileMode::Binary
+            }
+            _ => {
+                return Err(ParseError {
+                    message: "expected INPUT, OUTPUT, APPEND, RANDOM, or BINARY".into(),
+                    span: self.peek().span,
+                })
+            }
+        };
+        let handle = if self.match_kind(TokenKind::As) {
+            self.expect(TokenKind::Hash, "expected '#' before file handle")?;
+            self.expression()?
+        } else {
+            Expression::Literal(Literal::Int(1)) // Default handle
+        };
+        let record_len = if let TokenKind::Identifier(ref s) = self.peek().kind {
+            if s.to_uppercase() == "LEN" {
+                self.advance();
+                self.expect(TokenKind::Assign, "expected '=' after LEN")?;
+                Some(self.expression()?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        Ok(Statement::Open {
+            filename,
+            mode,
+            handle,
+            record_len,
+        })
+    }
+
+    fn close_stmt(&mut self) -> Result<Statement, ParseError> {
+        self.expect(TokenKind::Close, "expected CLOSE")?;
+        let mut handles = Vec::new();
+        if self.peek().kind == TokenKind::Hash {
+            loop {
+                self.advance(); // consume #
+                handles.push(self.expression()?);
+                if !self.match_kind(TokenKind::Comma) {
+                    break;
+                }
+            }
+        }
+        Ok(Statement::Close { handles })
+    }
+
+    fn line_input_hash(&mut self) -> Result<Statement, ParseError> {
+        self.expect(TokenKind::Line, "expected LINE")?;
+        self.expect(TokenKind::Input, "expected INPUT after LINE")?;
+        self.expect(TokenKind::Hash, "expected '#' before file handle")?;
+        let handle = self.expression()?;
+        self.expect(TokenKind::Comma, "expected ',' after file handle")?;
+        let target = self.expect_ident("expected variable name")?;
+        Ok(Statement::LineInputHash { handle, target })
+    }
+
+    fn select_case_stmt(&mut self) -> Result<Statement, ParseError> {
+        self.expect(TokenKind::Select, "expected SELECT")?;
+        self.expect(TokenKind::Case, "expected CASE after SELECT")?;
+        let expr = self.expression()?;
+        let mut cases = Vec::new();
+        let mut else_case = None;
+
+        loop {
+            match self.peek().kind {
+                TokenKind::Case => {
+                    self.advance(); // consume CASE
+                    if self.peek().kind == TokenKind::Else {
+                        self.advance(); // consume ELSE
+                        else_case = Some(self.statements_until_end_select()?);
+                    } else {
+                        let values = self.parse_case_values()?;
+                        let body = self.statements_until_case_or_end_select()?;
+                        cases.push(CaseClause { values, body });
+                    }
+                }
+                TokenKind::End => {
+                    self.advance(); // consume END
+                    self.expect(TokenKind::Select, "expected SELECT after END")?;
+                    break;
+                }
+                TokenKind::Eof => {
+                    return Err(ParseError {
+                        message: "expected END SELECT or CASE".into(),
+                        span: self.peek().span,
+                    });
+                }
+                _ => {
+                    return Err(ParseError {
+                        message: "expected CASE or END SELECT".into(),
+                        span: self.peek().span,
+                    });
+                }
+            }
+        }
+
+        Ok(Statement::SelectCase {
+            expr,
+            cases,
+            else_case,
+        })
+    }
+
+    fn parse_case_values(&mut self) -> Result<Vec<CaseValue>, ParseError> {
+        let mut values = Vec::new();
+        let first = self.expression()?;
+        if self.peek().kind == TokenKind::To {
+            self.advance(); // consume TO
+            let second = self.expression()?;
+            values.push(CaseValue::Range(first, second));
+        } else {
+            values.push(CaseValue::Single(first));
+        }
+        while self.match_kind(TokenKind::Comma) {
+            let val = self.expression()?;
+            if self.peek().kind == TokenKind::To {
+                self.advance(); // consume TO
+                let second = self.expression()?;
+                values.push(CaseValue::Range(val, second));
+            } else {
+                values.push(CaseValue::Single(val));
+            }
+        }
+        Ok(values)
+    }
+
+    fn statements_until_case_or_end_select(&mut self) -> Result<Vec<Statement>, ParseError> {
+        let mut stmts = Vec::new();
+        loop {
+            match self.peek().kind {
+                TokenKind::Case => break,
+                TokenKind::End => {
+                    // Check if this is END SELECT
+                    if self
+                        .tokens
+                        .get(self.current + 1)
+                        .map(|t| t.kind == TokenKind::Select)
+                        .unwrap_or(false)
+                    {
+                        break;
+                    }
+                    stmts.push(self.declaration()?);
+                }
+                TokenKind::Eof => break,
+                _ => stmts.push(self.declaration()?),
+            }
+        }
+        Ok(stmts)
+    }
+
+    fn statements_until_end_select(&mut self) -> Result<Vec<Statement>, ParseError> {
+        let mut stmts = Vec::new();
+        loop {
+            match self.peek().kind {
+                TokenKind::End => {
+                    // Check if this is END SELECT
+                    if self
+                        .tokens
+                        .get(self.current + 1)
+                        .map(|t| t.kind == TokenKind::Select)
+                        .unwrap_or(false)
+                    {
+                        break;
+                    }
+                    stmts.push(self.declaration()?);
+                }
+                TokenKind::Eof => break,
+                _ => stmts.push(self.declaration()?),
+            }
+        }
+        Ok(stmts)
     }
 
     fn resume_stmt(&mut self) -> Result<Statement, ParseError> {
@@ -291,6 +501,48 @@ impl Parser {
         match self.peek().kind {
             TokenKind::Print => {
                 self.advance();
+                // Check if this is PRINT# (file I/O)
+                if self.peek().kind == TokenKind::Hash {
+                    self.advance(); // consume #
+                    let handle = self.expression()?;
+                    self.expect(TokenKind::Comma, "expected ',' after file handle")?;
+                    let mut items = Vec::new();
+                    loop {
+                        match self.peek().kind {
+                            TokenKind::Comma => {
+                                self.advance();
+                                items.push(PrintItem::Comma);
+                            }
+                            TokenKind::Semi => {
+                                self.advance();
+                                items.push(PrintItem::Semi);
+                            }
+                            TokenKind::Eof => break,
+                            // Break on tokens that start new statements
+                            TokenKind::Print
+                            | TokenKind::Return
+                            | TokenKind::If
+                            | TokenKind::While
+                            | TokenKind::For
+                            | TokenKind::Do
+                            | TokenKind::On
+                            | TokenKind::Resume
+                            | TokenKind::Input
+                            | TokenKind::Open
+                            | TokenKind::Close
+                            | TokenKind::Line
+                            | TokenKind::Let
+                            | TokenKind::Dim
+                            | TokenKind::Function
+                            | TokenKind::Select
+                            | TokenKind::End => break,
+                            _ => {
+                                items.push(PrintItem::Expr(self.expression()?));
+                            }
+                        }
+                    }
+                    return Ok(Statement::PrintHash { handle, items });
+                }
                 let expr = self.expression()?;
                 Ok(Statement::Print { expr })
             }
@@ -310,7 +562,11 @@ impl Parser {
             TokenKind::Do => self.do_stmt(),
             TokenKind::On => self.on_error_stmt(),
             TokenKind::Resume => self.resume_stmt(),
-            TokenKind::Input => self.input_stmt(),
+            TokenKind::Input => self.input_or_input_hash(),
+            TokenKind::Open => self.open_stmt(),
+            TokenKind::Close => self.close_stmt(),
+            TokenKind::Line => self.line_input_hash(),
+            TokenKind::Select => self.select_case_stmt(),
             TokenKind::Identifier(_) => {
                 // Check for array assignment: arr(0) = 42
                 let next_is_lparen = self
@@ -379,6 +635,16 @@ impl Parser {
                     let expr = self.expression()?;
                     Ok(Statement::ExpressionStmt { expr })
                 }
+            }
+            TokenKind::End => {
+                // Standalone END terminates the program
+                self.advance();
+                Ok(Statement::ExpressionStmt {
+                    expr: Expression::Call {
+                        callee: "std::process::exit".to_string(),
+                        args: vec![Expression::Literal(Literal::Int(0))],
+                    },
+                })
             }
             _ => {
                 let expr = self.expression()?;

@@ -8,6 +8,33 @@ The format is based on Keep a Changelog.
 
 ### Added
 
+- RFC-0020: SELECT CASE statement — Multi-way conditional branching with single values, comma-separated values, and TO ranges; CASE ELSE fallback; codegen as if-else-if chain
+- RFC-0044: Date/Time System (v0.2) — Dual design: Phase 1 VB6 Date (F64) + Phase 2 DateTime with timezone support (Go-style), TimeSpan type, UTC/Local/Offset conversions, Unix timestamps, ISO 8601
+- RFC-0043: Modern File I/O — File type with methods, Result<T, IOError> error handling, RAII via ARC, Iterator-based line reading, binary typed read/write
+- RFC-0042: File I/O (QuickBASIC Classic) — OPEN, CLOSE, INPUT#, PRINT#, LINE INPUT#, EOF, LOF, FREEFILE, SEEK, FILEATTR, MKI$/MKS$/MKD$, CVI/CVS/CVD
+- File I/O implementation: lexer tokens (OPEN, CLOSE, LINE, APPEND, RANDOM, BINARY, Hash, Semi), parser (Open, Close, InputHash, PrintHash, LineInputHash AST nodes), semantic analysis, code generation, and runtime (src/runtime/file.rs)
+- RFC-0040: Optional<T> type (Future) — type-safe absence representation with Some/None, IsSome/IsNone/Unwrap/UnwrapOr/Expect methods
+- RFC-0041: Result<T, E> type (Future) — type-safe error handling with Ok/Err, IsOk/IsErr/Unwrap/UnwrapOr/Expect/Map/MapErr methods
+- RFC-0020: SELECT CASE statement (Draft, Phase 1)
+- RFC-0021: GOTO/GOSUB statements (Draft, Phase 1)
+- RFC-0022: SUB/CALL statements (Draft, Phase 1)
+- RFC-0023: OPTION EXPLICIT / OPTION BASE (Draft, Phase 1)
+- RFC-0024: EXIT FOR/WHILE/DO (Draft, Phase 1)
+- RFC-0025: PUBLIC/PRIVATE visibility (Draft, Phase 1)
+- RFC-0026: BYVAL/BYREF/OPTIONAL parameter passing (Draft, Phase 1)
+- RFC-0027: TYPE...END TYPE user-defined types (Draft, Phase 1)
+- RFC-0028: MODULE/IMPORT (Draft, Phase 2)
+- RFC-0029: DECLARE LIBRARY C interop (Draft, Phase 2)
+- RFC-0030: ENUM (Draft, Phase 2)
+- RFC-0031: ASYNC/AWAIT/GO concurrency (Draft, Phase 2)
+- RFC-0032: CONTINUE FOR/WHILE/DO (Draft, Phase 2)
+- RFC-0033: FOR EACH (Draft, Phase 2)
+- RFC-0034: String interpolation f"..." and raw strings (Draft, Phase 2)
+- RFC-0035: Modern arrays array<T,N>, inference, slicing (Draft, Phase 2)
+- RFC-0036: Ref<T>/Weak<T> memory references (Draft, Phase 2)
+- RFC-0037: OPTION IMPLICIT (Draft, Phase 2)
+- RFC-0038: DO EVENTS cooperative multitasking (Draft, Phase 2)
+- RFC-0039: Modern TYPE syntax with : and defaults (Draft, Phase 2)
 - RFC-0018: Compound Assignment Operators (Accepted + implemented)
 - Compound assignment operators: `+=`, `-=`, `*=`, `/=`, `\=`, `MOD=`
 - Lexer: longest-match tokens `PlusEqual`, `MinusEqual`, `StarEqual`, `SlashEqual`, `BackslashEqual`, `ModEqual`
@@ -28,6 +55,15 @@ The format is based on Keep a Changelog.
 
 ### Changed
 
+- RFC-0001 (v0.2): Added QuickBASIC as source of truth, Stage 7, RBScript, compilation modes
+- RFC-0002: Added 30+ reserved words (NEXT, WEND, SELECT, CASE, SUB, CALL, BYVAL, BYREF, etc.)
+- RFC-0003 (v0.2): Rewritten — 3-phase implementation model with 48 features
+- RFC-0004 (v0.2): Rewritten — QuickBASIC syntax (WEND/NEXT), + SELECT CASE, GOTO, GOSUB, SUB, EXIT, OPTION, DO EVENTS, labels
+- RFC-0005 (v0.2): Added 16 new AST nodes (SelectCase, Goto, Gosub, SubDecl, Call, Label, DoEvents, etc.)
+- RFC-0009 (v0.2): Changed END FOR to NEXT i, added EXIT FOR
+- RFC-0012 (v0.2): Added TO bounds, OPTION BASE, DimBound AST node
+- RFC-0014 (v0.2): Added Ref<T>/Weak<T> as Phase 2, lifecycle documentation
+- RFC-0018 (v0.2): Added ^= operator, status changed to Draft
 - RFC-0002: Updated identifier rules to allow optional trailing `$` suffix; added `identifier ::= [A-Za-z_][A-Za-z0-9_]*[$]?` grammar
 - RFC-0004: Added `assign_stmt` grammar rule; updated `statement` production to include standalone assignment; renumbered sections
 - RFC-0005: Added `Statement::Assign` variant to AST specification; updated variant count from 12 to 13

@@ -634,4 +634,25 @@ END WHILE
         let out = compile("LET MUT b: BOOLEAN = FALSE\nINPUT b");
         assert!(out.contains("rbasic::runtime::io::input_bool"));
     }
+
+    #[test]
+    fn test_select_case_codegen() {
+        let out = compile(
+            r#"
+LET MUT x: I32 = 1
+SELECT CASE x
+    CASE 1
+        PRINT "one"
+    CASE 2 TO 5
+        PRINT "small"
+    CASE ELSE
+        PRINT "other"
+END SELECT
+"#,
+        );
+        assert!(out.contains("let __select_val = x;"));
+        assert!(out.contains("if ((__select_val == 1))"));
+        assert!(out.contains("(__select_val >= 2) && (__select_val <= 5)"));
+        assert!(out.contains("} else {"));
+    }
 }

@@ -1,7 +1,7 @@
 # RFC-0005: AST Specification
 
 Status: Accepted
-Version: 0.1
+Version: 0.2
 Author: RBASIC Project
 Created: 2026-06-19
 Last Updated: 2026-06-20
@@ -10,7 +10,7 @@ Last Updated: 2026-06-20
 
 ## 1. Summary
 
-This RFC defines the Abstract Syntax Tree (AST) for RBASIC v0.1. The AST is the output of the parser (RFC-0004) and the input to semantic analysis (RFC-0006) and code generation.
+This RFC defines the Abstract Syntax Tree (AST) for RBASIC v0.2. The AST is the output of the parser (RFC-0004) and the input to semantic analysis (RFC-0006) and code generation.
 
 ---
 
@@ -28,7 +28,7 @@ Program {
 }
 ```
 
-A program is a sequence of statements. Statements may be top-level or nested inside control flow and function bodies.
+A program is a sequence of statements. Statements may be top-level or nested inside control flow and function/subroutine bodies.
 
 ---
 
@@ -37,17 +37,33 @@ A program is a sequence of statements. Statements may be top-level or nested ins
 ```text
 Statement ::= VarDecl
             | Print
+            | Input
             | Return
             | If
             | While
             | For
             | DoLoop
+            | SelectCase
             | Dim
             | OnError
             | Resume
+            | Goto
+            | Gosub
+            | OnGoto
+            | OnGosub
+            | DoEvents
+            | OptionExplicit
+            | OptionBase
+            | ExitFor
+            | ExitWhile
+            | ExitDo
+            | SubDecl
+            | Call
             | Assign
+            | AssignOp
             | ExpressionStmt
             | FunctionDecl
+            | Label
 ```
 
 ### 4.1 VarDecl
@@ -60,19 +76,30 @@ VarDecl {
 }
 ```
 
-Variable declaration (`LET name [":" type] "=" expression`). The initializer is mandatory. The type annotation is optional.
+Variable declaration (`LET name [":" type] "=" expression`). The initializer is mandatory.
 
 ### 4.2 Print
 
 ```text
 Print {
-    expr: Expression,
+    exprs: Vec<Expression>,
 }
 ```
 
-Print statement (`PRINT expression`).
+Print statement (`PRINT expression`). Multiple expressions separated by `,` or `;`.
 
-### 4.3 Return
+### 4.3 Input
+
+```text
+Input {
+    prompt: Option<Expression>,
+    target: String,
+}
+```
+
+Input statement (`INPUT "prompt", variable` or `INPUT variable`).
+
+### 4.4 Return
 
 ```text
 Return {
@@ -80,21 +107,25 @@ Return {
 }
 ```
 
-Return statement (`RETURN expression?`). The expression is optional, allowing bare `RETURN` (defaults to unit).
+Return from GOSUB (`RETURN` or `RETURN expression`).
 
-### 4.4 If
+### 4.5 If
 
 ```text
 If {
     condition:   Expression,
     then_branch: Vec<Statement>,
+    elseif_clauses: Vec<ElseIfClause>,
     else_branch: Option<Vec<Statement>>,
+}
+
+ElseIfClause {
+    condition: Expression,
+    body:      Vec<Statement>,
 }
 ```
 
-Multi-line if statement (`IF condition THEN block [ELSE block] END IF`).
-
-### 4.5 While
+### 4.6 While
 
 ```text
 While {
@@ -103,9 +134,9 @@ While {
 }
 ```
 
-While loop (`WHILE condition block END WHILE`).
+While loop (`WHILE condition ... WEND`).
 
-### 4.6 For
+### 4.7 For
 
 ```text
 For {
@@ -117,9 +148,9 @@ For {
 }
 ```
 
-For loop (`FOR var = start TO end [STEP step] block END FOR`). The loop variable is implicitly MUT within the loop body.
+For loop (`FOR var = start TO end [STEP step] ... NEXT [var]`).
 
-### 4.7 DoLoop
+### 4.8 DoLoop
 
 ```text
 DoLoop {
@@ -127,44 +158,53 @@ DoLoop {
     condition: Option<Expression>,
     body:      Vec<Statement>,
 }
-```
 
-```text
 DoLoopVariant ::= WhilePre | UntilPre | WhilePost | UntilPost
 ```
 
-Four loop variants:
-- **WhilePre**: `DO WHILE cond ... LOOP`
-- **UntilPre**: `DO UNTIL cond ... LOOP`
-- **WhilePost**: `DO ... LOOP WHILE cond`
-- **UntilPost**: `DO ... LOOP UNTIL cond`
+### 4.9 SelectCase
 
-### 4.8 Dim
+```text
+SelectCase {
+    expr:     Expression,
+    cases:    Vec<CaseClause>,
+    else_case: Option<Vec<Statement>>,
+}
+
+CaseClause {
+    values: Vec<CaseValue>,
+    body:   Vec<Statement>,
+}
+
+CaseValue ::= Single(Expression)
+            | Range(Expression, Expression)
+```
+
+### 4.10 Dim
 
 ```text
 Dim {
     declarations: Vec<ArrayDecl>,
 }
-```
 
-```text
 ArrayDecl {
     name:       String,
     array_type: ArrayType,
-    init:       Option<Expression>,   // reserved for future use
+    init:       Option<Expression>,
 }
-```
 
-```text
 ArrayType {
     base_type:  Box<TypeRef>,
-    dimensions: Vec<Expression>,       // array sizes
+    dimensions: Vec<DimBound>,
+}
+
+DimBound {
+    lower: Option<Expression>,
+    upper: Expression,
 }
 ```
 
-Array declaration (`DIM name(dim1, dim2, ...)`). Base type defaults to `INTEGER` (I32). Code generation is deferred to a future version.
-
-### 4.9 OnError
+### 4.11 OnError
 
 ```text
 OnError {
@@ -172,9 +212,7 @@ OnError {
 }
 ```
 
-Error handler directive (`ON ERROR GOTO label`).
-
-### 4.10 Resume
+### 4.12 Resume
 
 ```text
 Resume {
@@ -182,9 +220,108 @@ Resume {
 }
 ```
 
-Error recovery (`RESUME` or `RESUME label`).
+### 4.13 Goto
 
-### 4.11 Assign
+```text
+Goto {
+    label: String,
+}
+```
+
+### 4.14 Gosub
+
+```text
+Gosub {
+    label: String,
+}
+```
+
+### 4.15 OnGoto
+
+```text
+OnGoto {
+    expr:   Expression,
+    labels: Vec<String>,
+}
+```
+
+### 4.16 OnGosub
+
+```text
+OnGosub {
+    expr:   Expression,
+    labels: Vec<String>,
+}
+```
+
+### 4.17 DoEvents
+
+```text
+DoEvents {}
+```
+
+### 4.18 OptionExplicit
+
+```text
+OptionExplicit {}
+```
+
+### 4.19 OptionBase
+
+```text
+OptionBase {
+    base: i32,
+}
+```
+
+### 4.20 ExitFor
+
+```text
+ExitFor {}
+```
+
+### 4.21 ExitWhile
+
+```text
+ExitWhile {}
+```
+
+### 4.22 ExitDo
+
+```text
+ExitDo {}
+```
+
+### 4.23 SubDecl
+
+```text
+SubDecl {
+    name:   String,
+    params: Vec<Param>,
+    body:   Vec<Statement>,
+}
+```
+
+```text
+Param {
+    name:    String,
+    typ:     TypeRef,
+    passing: ParamPassing,
+}
+
+ParamPassing ::= ByVal | ByRef | Optional
+```
+
+### 4.24 Call
+
+```text
+Call {
+    name: String,
+    args: Vec<Expression>,
+}
+```
+
+### 4.25 Assign
 
 ```text
 Assign {
@@ -193,9 +330,19 @@ Assign {
 }
 ```
 
-Standalone assignment (`x = expression`). The variable must be declared and mutable.
+### 4.26 AssignOp
 
-### 4.12 ExpressionStmt
+```text
+AssignOp {
+    target: String,
+    op:     CompoundAssignOp,
+    expr:   Expression,
+}
+
+CompoundAssignOp ::= AddEq | SubEq | MulEq | DivEq | IntDivEq | PowerEq | ModEq
+```
+
+### 4.27 ExpressionStmt
 
 ```text
 ExpressionStmt {
@@ -203,9 +350,7 @@ ExpressionStmt {
 }
 ```
 
-An expression used as a statement (typically function calls).
-
-### 4.13 FunctionDecl
+### 4.28 FunctionDecl
 
 ```text
 FunctionDecl {
@@ -216,12 +361,11 @@ FunctionDecl {
 }
 ```
 
-Function declaration (`FUNCTION name "(" params ")" [RETURNS type] block END FUNCTION`).
+### 4.29 Label
 
 ```text
-Param {
+Label {
     name: String,
-    typ:  TypeRef,
 }
 ```
 
@@ -258,11 +402,6 @@ A simple name reference, resolved later during semantic analysis.
 UnaryOp ::= Neg | Not
 ```
 
-| Variant | Syntax | Semantics |
-|---------|--------|-----------|
-| `Neg`   | `-expr` | Numeric negation (signed integers and floats) |
-| `Not`   | `NOT expr` | Logical NOT (BOOL only) |
-
 ### 5.4 Binary
 
 ```text
@@ -273,17 +412,9 @@ BinaryOp ::= Add | Sub | Mul | Div | Pow | IntDiv | Mod
            | Shl | Shr
 ```
 
-| Category         | Operators                                          |
-|------------------|----------------------------------------------------|
-| Arithmetic       | `+`, `-`, `*`, `/`, `^` (Pow), `\` (IntDiv), `MOD` |
-| Equality         | `==`, `!=`                                         |
-| Relational       | `<`, `<=`, `>`, `>=`                               |
-| Logical          | `AND`, `OR`, `XOR`                                 |
-| Bitwise shift    | `SHL`, `SHR`                                       |
-
 ### 5.5 Grouping
 
-Parenthesized expression (`(expression)`). Used to override operator precedence.
+Parenthesized expression (`(expression)`).
 
 ### 5.6 Cast
 
@@ -294,7 +425,7 @@ Cast {
 }
 ```
 
-Postfix explicit type cast (`expr AS TypeName`). Valid for all numeric types (signed integers, unsigned integers, floats).
+Postfix explicit type cast (`expr AS TypeName`).
 
 ### 5.7 Call
 
@@ -317,27 +448,27 @@ TypeRef {
 }
 ```
 
-A type annotation is represented as a string identifier. Valid primitive types are validated during semantic analysis, not during parsing. The full v0.1 type set: `BOOL`, `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, `U64`, `F32`, `F64`, `STRING`, plus classic BASIC aliases (`INTEGER`, `LONG`, `DOUBLE`, `SINGLE`, `BOOLEAN`, `BYTE`, `WORD`, `LONGLONG`). All type names are case‑insensitive.
+A type annotation is represented as a string identifier. Valid primitive types are validated during semantic analysis.
 
 ---
 
 ## 7. Traversal Order
 
-Semantic analysis and code generation traverse the AST as follows:
-
 1. **Program**: iterate statements in order
-2. **FunctionDecl**: collect name/params/ret_type, then recurse into body
-3. **If**: visit condition, then recurse into then_branch and else_branch
+2. **FunctionDecl/SubDecl**: collect name/params/ret_type, then recurse into body
+3. **If**: visit condition, then recurse into then_branch, elseif_clauses, else_branch
 4. **While**: visit condition, then recurse into body
-5. **For**: visit start, end, step (if present), then recurse into body
-6. **DoLoop**: visit condition (if present), then recurse into body
-7. **VarDecl**: visit init expression
-8. **Print/Return/ExpressionStmt/Dim/OnError/Resume**: visit inner expression(s)
-9. **Cast**: visit inner expression
-10. **Binary**: left then right
-11. **Unary**: inner expression
-12. **Call**: visit all arguments
-13. **Literal/Identifier**: leaf nodes
+5. **For**: visit start, end, step, then recurse into body
+6. **DoLoop**: visit condition, then recurse into body
+7. **SelectCase**: visit expr, then each case value and body
+8. **VarDecl/Assign/AssignOp**: visit init/target expression
+9. **Print/Input/Return/ExpressionStmt/Dim/OnError/Resume**: visit inner expression(s)
+10. **Goto/Gosub/OnGoto/OnGosub/DoEvents/OptionExplicit/OptionBase/ExitFor/ExitWhile/ExitDo/Label**: leaf nodes
+11. **Call**: visit all arguments
+12. **Cast**: visit inner expression
+13. **Binary**: left then right
+14. **Unary**: inner expression
+15. **Literal/Identifier**: leaf nodes
 
 ---
 
@@ -345,14 +476,18 @@ Semantic analysis and code generation traverse the AST as follows:
 
 ```text
 ✓ Program node with statement list
-✓ All 13 statement variants defined (VarDecl, Print, Return, If, While, For, DoLoop, Dim, OnError, Resume, Assign, ExpressionStmt, FunctionDecl)
-✓ All 7 expression variants defined (Literal, Identifier, Unary, Binary, Grouping, Cast, Call)
-✓ All 4 literal types defined (Int, Float, String, Bool)
+✓ All 29 statement variants defined
+✓ All 7 expression variants defined
+✓ All 4 literal types defined
 ✓ Unary operators: Neg, Not
 ✓ Binary operators: Add, Sub, Mul, Div, Pow, IntDiv, Mod, Eq, NotEq, Lt, Lte, Gt, Gte, And, Or, Xor, Shl, Shr
 ✓ TypeRef defined
 ✓ DoLoopVariant defined (WhilePre, UntilPre, WhilePost, UntilPost)
-✓ ArrayDecl / ArrayType defined
+✓ SelectCase / CaseClause / CaseValue defined
+✓ Dim / ArrayDecl / ArrayType / DimBound defined
+✓ Param / ParamPassing defined (ByVal, ByRef, Optional)
+✓ CompoundAssignOp defined (AddEq, SubEq, MulEq, DivEq, IntDivEq, PowerEq, ModEq)
+✓ Label node defined
 ✓ Traversal order specified
 ✓ Matches parser implementation in src/parser/ast.rs
 ```

@@ -1,16 +1,16 @@
 # RFC-0018: Compound Assignment Operators
 
-Status: Accepted
-Version: 0.1
+Status: Draft
+Version: 0.2
 Author: RBASIC Project
 Created: 2026-06-19
-Last Updated: 2026-06-19
+Last Updated: 2026-06-20
 
 ---
 
 ## 1. Summary
 
-Add compound assignment operators (`+=`, `-=`, `*=`, `/=`, `\=`, `MOD=`) to RBASIC, providing shorthand for common mutation patterns.
+Add compound assignment operators (`+=`, `-=`, `*=`, `/=`, `\=`, `^=`, `MOD=`) to RBASIC, providing shorthand for common mutation patterns. This is a Phase 2 (Modern Extensions) feature.
 
 ---
 
@@ -38,7 +38,7 @@ total *= value
 
 ```ebnf
 compound_assign_stmt ::= IDENTIFIER compound_assign_op expression
-compound_assign_op   ::= "+=" | "-=" | "*=" | "/=" | "\=" | "MOD="
+compound_assign_op   ::= "+=" | "-=" | "*=" | "/=" | "\=" | "^=" | "MOD="
 ```
 
 ### 3.2 Token Inventory
@@ -51,6 +51,7 @@ MinusEqual   (-=)
 StarEqual    (*=)
 SlashEqual   (/=)
 BackslashEqual (\=)
+CaretEqual   (^=)
 ModEqual     (MOD=)
 ```
 
@@ -64,6 +65,7 @@ total -= discount
 price *= 1.1
 count /= 2
 quotient \= 3
+base ^= 2
 remainder MOD= 10
 ```
 
@@ -80,6 +82,7 @@ Each compound assignment is syntactic sugar for read‑modify‑write:
 | `x *= y` | `x = x * y`         | Numeric only                         |
 | `x /= y` | `x = x / y`         | Numeric only (float division)        |
 | `x \= y` | `x = x \ y`         | Integer only (integer division)      |
+| `x ^= y` | `x = x ^ y`         | Numeric only (power, returns F64)    |
 | `x MOD= y`| `x = x MOD y`       | Integer only (modulo)                |
 
 ### 4.1 Type Rules
@@ -115,6 +118,7 @@ pub enum CompoundAssignOp {
     MulEq,
     DivEq,
     IntDivEq,
+    PowerEq,
     ModEq,
 }
 ```
@@ -232,7 +236,7 @@ If `++`/`--` are desired in a future version, they require a separate RFC.
 
 ```text
 ✓ `x += 1` parsed as compound assignment
-✓ `x -= 1`, `x *= 2`, `x /= 2`, `x \= 2`, `x MOD= 2` parsed
+✓ `x -= 1`, `x *= 2`, `x /= 2`, `x \= 2`, `x ^= 2`, `x MOD= 2` parsed
 ✓ Undeclared target produces E1043
 ✓ Immutable target produces E1044
 ✓ Type mismatch produces E1045

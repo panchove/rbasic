@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::fmt::Write;
 
 use crate::parser::ast::{
-    BinaryOp, CompoundAssignOp, DoLoopVariant, Expression, Literal, Program, Statement, UnaryOp,
+    BinaryOp, CaseValue, CompoundAssignOp, DoLoopVariant, Expression, FileMode, Literal, PrintItem,
+    Program, Statement, UnaryOp,
 };
 use crate::semantic::types::Type;
 
@@ -401,6 +402,166 @@ fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize, types: &HashMap<S
             out.push('\n');
         }
         Statement::Resume { .. } => {}
+        // File I/O statements
+        Statement::Open {
+            filename,
+            mode,
+            handle,
+            record_len,
+        } => {
+            out.push_str(&pad);
+            let mode_str = match mode {
+                FileMode::Input => "Input",
+                FileMode::Output => "Output",
+                FileMode::Append => "Append",
+                FileMode::Random => "Random",
+                FileMode::Binary => "Binary",
+            };
+            out.push_str(&format!(
+                "let file_handle_{} = rbasic::runtime::file::open(",
+                handle_expr_to_num(handle)
+            ));
+            gen_expr(filename, out);
+            out.push_str(&format!(", rbasic::runtime::file::FileMode::{})", mode_str));
+            if let Some(len) = record_len {
+                out.push_str(", Some(");
+                gen_expr(len, out);
+                out.push(')');
+            } else {
+                out.push_str(", None");
+            }
+            out.push_str(").unwrap();\n");
+        }
+        Statement::Close { handles } => {
+            out.push_str(&pad);
+            if handles.is_empty() {
+                out.push_str("rbasic::runtime::file::close_all();\n");
+            } else {
+                for handle in handles {
+                    out.push_str(&format!(
+                        "rbasic::runtime::file::close({});\n",
+                        handle_expr_to_num(handle)
+                    ));
+                }
+            }
+        }
+        Statement::InputHash { handle, targets } => {
+            out.push_str(&pad);
+            for target in targets {
+                out.push_str(&format!(
+                    "{} = rbasic::runtime::file::input_hash({})?;\n",
+                    target,
+                    handle_expr_to_num(handle)
+                ));
+            }
+        }
+        Statement::PrintHash { handle, items } => {
+            out.push_str(&pad);
+            out.push_str(&format!(
+                "rbasic::runtime::file::print_hash({}, \"",
+                handle_expr_to_num(handle)
+            ));
+            for item in items {
+                match item {
+                    PrintItem::Comma => out.push_str("\\t"),
+                    PrintItem::Semi => {}
+                    PrintItem::Expr(_expr) => {
+                        out.push_str("{}");
+                    }
+                }
+            }
+            out.push_str("\", ");
+            let mut first = true;
+            for item in items {
+                if let PrintItem::Expr(expr) = item {
+                    if !first {
+                        out.push_str(", ");
+                    }
+                    gen_expr(expr, out);
+                    first = false;
+                }
+            }
+            out.push_str(");\n");
+        }
+        Statement::LineInputHash { handle, target } => {
+            out.push_str(&pad);
+            out.push_str(&format!(
+                "{} = rbasic::runtime::file::line_input_hash({})?;\n",
+                target,
+                handle_expr_to_num(handle)
+            ));
+        }
+        Statement::SelectCase {
+            expr,
+            cases,
+            else_case,
+        } => {
+            out.push_str(&pad);
+            out.push_str("{\n");
+            out.push_str(&pad);
+            out.push_str("    let __select_val = ");
+            gen_expr(expr, out);
+            out.push_str(";\n");
+
+            let mut first = true;
+            for case in cases {
+                for value in &case.values {
+                    out.push_str(&pad);
+                    if first {
+                        out.push_str("    if ");
+                        first = false;
+                    } else {
+                        out.push_str("    } else if ");
+                    }
+
+                    match value {
+                        CaseValue::Single(val_expr) => {
+                            out.push_str("((__select_val == ");
+                            gen_expr(val_expr, out);
+                            out.push_str("))");
+                        }
+                        CaseValue::Range(low, high) => {
+                            out.push_str("(((__select_val >= ");
+                            gen_expr(low, out);
+                            out.push_str(") && (__select_val <= ");
+                            gen_expr(high, out);
+                            out.push_str(")))");
+                        }
+                    }
+                    out.push_str(" {\n");
+
+                    // Generate case body
+                    for stmt in &case.body {
+                        gen_stmt(stmt, out, indent + 2, types);
+                    }
+                }
+            }
+
+            if let Some(else_stmts) = else_case {
+                out.push_str(&pad);
+                out.push_str("    } else {\n");
+                for stmt in else_stmts {
+                    gen_stmt(stmt, out, indent + 2, types);
+                }
+            }
+
+            out.push_str(&pad);
+            out.push_str("    }\n");
+            out.push_str(&pad);
+            out.push_str("}\n");
+        }
+        Statement::SubDecl { .. } => {
+            // Sub declarations are not yet supported in codegen
+            out.push_str(&pad);
+            out.push_str("// SUB declaration not yet supported\n");
+        }
+    }
+}
+
+fn handle_expr_to_num(expr: &Expression) -> i64 {
+    match expr {
+        Expression::Literal(Literal::Int(n)) => *n,
+        _ => 1, // Default handle
     }
 }
 

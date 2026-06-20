@@ -1,5 +1,6 @@
 use crate::parser::ast::{
-    BinaryOp, CompoundAssignOp, Expression, Literal, Program, Statement, UnaryOp,
+    BinaryOp, CaseValue, CompoundAssignOp, Expression, FileMode, Literal, PrintItem, Program,
+    Statement, UnaryOp,
 };
 use crate::semantic::errors::{SemanticError, SemanticErrorCode};
 use crate::semantic::types::Type;
@@ -1255,6 +1256,150 @@ pub fn analyze(prog: &Program) -> Result<ArrayInfo, Vec<SemanticError>> {
             }
             Statement::Resume { .. } => {
                 // RESUME — no semantic validation in v0.1
+            }
+            // File I/O statements
+            Statement::Open {
+                filename,
+                mode,
+                handle,
+                record_len,
+            } => {
+                resolve_expr(filename, locals, globals, functions, arrays, errors);
+                resolve_expr(handle, locals, globals, functions, arrays, errors);
+                if let Some(len) = record_len {
+                    resolve_expr(len, locals, globals, functions, arrays, errors);
+                }
+                // Validate mode-specific requirements
+                if *mode == FileMode::Random && record_len.is_none() {
+                    err(
+                        errors,
+                        SemanticErrorCode::E1060,
+                        "RANDOM mode requires LEN clause".to_string(),
+                    );
+                }
+            }
+            Statement::Close { handles } => {
+                for handle in handles {
+                    resolve_expr(handle, locals, globals, functions, arrays, errors);
+                }
+            }
+            Statement::InputHash { handle, targets } => {
+                resolve_expr(handle, locals, globals, functions, arrays, errors);
+                for target in targets {
+                    let key = target.to_lowercase();
+                    if !locals.contains_key(&key) {
+                        err(
+                            errors,
+                            SemanticErrorCode::E1061,
+                            format!("INPUT# target '{}' is not declared", target),
+                        );
+                    }
+                }
+            }
+            Statement::PrintHash { handle, items } => {
+                resolve_expr(handle, locals, globals, functions, arrays, errors);
+                for item in items {
+                    if let PrintItem::Expr(expr) = item {
+                        resolve_expr(expr, locals, globals, functions, arrays, errors);
+                    }
+                }
+            }
+            Statement::LineInputHash { handle, target } => {
+                resolve_expr(handle, locals, globals, functions, arrays, errors);
+                let key = target.to_lowercase();
+                if !locals.contains_key(&key) {
+                    err(
+                        errors,
+                        SemanticErrorCode::E1062,
+                        format!("LINE INPUT# target '{}' is not declared", target),
+                    );
+                }
+            }
+            Statement::SubDecl { .. } => {
+                // SUB declaration not yet supported in semantic analysis
+            }
+            Statement::SelectCase {
+                expr,
+                cases,
+                else_case,
+            } => {
+                // Analyze the select expression
+                let select_type = resolve_expr(expr, locals, globals, functions, arrays, errors);
+
+                // Analyze each case clause
+                for case in cases {
+                    for value in &case.values {
+                        match value {
+                            CaseValue::Single(val_expr) => {
+                                let val_type = resolve_expr(
+                                    val_expr, locals, globals, functions, arrays, errors,
+                                );
+                                if let (Some(st), Some(vt)) = (&select_type, &val_type) {
+                                    if !types_compatible(st, vt) {
+                                        err(
+                                            errors,
+                                            SemanticErrorCode::E1020,
+                                            format!("case value type {:?} not compatible with select expression type {:?}", vt, st),
+                                        );
+                                    }
+                                }
+                            }
+                            CaseValue::Range(low, high) => {
+                                let low_type =
+                                    resolve_expr(low, locals, globals, functions, arrays, errors);
+                                let high_type =
+                                    resolve_expr(high, locals, globals, functions, arrays, errors);
+                                if let (Some(st), Some(lt)) = (&select_type, &low_type) {
+                                    if !types_compatible(st, lt) {
+                                        err(
+                                            errors,
+                                            SemanticErrorCode::E1020,
+                                            format!("range low bound type {:?} not compatible with select expression type {:?}", lt, st),
+                                        );
+                                    }
+                                }
+                                if let (Some(st), Some(ht)) = (&select_type, &high_type) {
+                                    if !types_compatible(st, ht) {
+                                        err(
+                                            errors,
+                                            SemanticErrorCode::E1020,
+                                            format!("range high bound type {:?} not compatible with select expression type {:?}", ht, st),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Analyze case body
+                    for stmt in &case.body {
+                        walk_stmt(
+                            stmt,
+                            locals,
+                            globals,
+                            functions,
+                            arrays,
+                            errors,
+                            inside_function,
+                            current_ret_type,
+                        );
+                    }
+                }
+
+                // Analyze else case body
+                if let Some(else_stmts) = else_case {
+                    for stmt in else_stmts {
+                        walk_stmt(
+                            stmt,
+                            locals,
+                            globals,
+                            functions,
+                            arrays,
+                            errors,
+                            inside_function,
+                            current_ret_type,
+                        );
+                    }
+                }
             }
         }
     }

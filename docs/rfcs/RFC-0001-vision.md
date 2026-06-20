@@ -1,16 +1,18 @@
 # RFC-0001: Vision and Goals
 
 Status: Accepted
-Version: 0.1
+Version: 0.2
 Author: RBASIC Project
 Created: 2026-06-17
-Last Updated: 2026-06-19
+Last Updated: 2026-06-20
 
 ---
 
 ## 1. Summary
 
 RBASIC is a modern programming language inspired by the readability of BASIC, the safety of Rust, the operational simplicity of Go, the hardware proximity of C, and the productivity of modern languages. Its compiler is written in Rust and generates Rust code, using rustc (LLVM) as the backend.
+
+**QuickBASIC is the source of truth** for the language features that RBASIC aims to implement. All syntax, semantics, and control flow constructs are defined by QuickBASIC as the canonical reference. RBASIC extends this foundation with modern safety features, but the core language behavior must remain faithful to QuickBASIC.
 
 This RFC defines the long-term vision and strategic goals of the RBASIC project as established in the project's intention document (DOCUMENTO_DE_INTENCION.md).
 
@@ -33,7 +35,7 @@ Develop a complete ecosystem composed of:
 
 - Native compilation via Rust backend (rustc/LLVM)
 - Static typing
-- Memory safety
+- Memory safety (stack + ARC + Weak, no garbage collector)
 - Explicit error handling
 - Cross-platform portability
 - C interoperability
@@ -66,17 +68,17 @@ Language abstractions must not introduce unnecessary runtime penalties.
 
 ```text
 Lexer
- ↓
+  ↓
 Parser
- ↓
+  ↓
 AST
- ↓
+  ↓
 Semantic Analysis
- ↓
+  ↓
 Typed AST
- ↓
+  ↓
 Code Generation (Rust)
- ↓
+  ↓
 rustc (LLVM)
 ```
 
@@ -90,9 +92,26 @@ This strategy provides:
 - Future bootstrapping path via codegen rewrite in RBASIC
 - Portability to all Rust-supported platforms
 
+### Compilation Modes
+
+- **32‑bit** (`--target i686`) — generates 32‑bit executables
+- **64‑bit** (`--target x86_64`) — default. Generates 64‑bit executables
+
 ---
 
-## 5. Long-term Goals
+## 5. Implementation Phases
+
+RBASIC features are organized in three phases (see RFC-0003):
+
+| Phase | Description |
+|-------|-------------|
+| Phase 1 | QuickBASIC-compatible core |
+| Phase 2 | Modern extensions (safety, expressiveness) |
+| Phase 3 | Future features (generics) |
+
+---
+
+## 6. Long-term Goals
 
 RBASIC aims to be a modern, safe, and sustainable language suitable for:
 
@@ -103,23 +122,25 @@ RBASIC aims to be a modern, safe, and sustainable language suitable for:
 - Cross-platform applications
 - Compilers and developer tools
 - Office suite automation via **RBA (RBasic for Applications)**, as a modern VBA replacement in LibreOffice, FreeOffice and OnlyOffice
+- Automation scripting via **RBScript**, as a modern VBScript replacement
 
 ---
 
-## 6. Evolution Strategy
+## 7. Evolution Strategy
 
-| Stage | Description |
-|-------|-------------|
-| 1 | Minimal functional RBASIC |
-| 2 | Basic standard library |
-| 3 | Production-ready compiler |
-| 4 | Progressive compiler rewrite in RBASIC |
-| 5 | Self-hosting |
-| 6 | Native LLVM/Cranelift backend |
+| Stage | Phase | Description |
+|-------|-------|-------------|
+| 1 | Phase 1 | QuickBASIC-compatible core complete |
+| 2 | Phase 2 | Modern extensions begin + standard library |
+| 3 | Phase 2 | Phase 2 complete, compiler processes real projects |
+| 4 | Phase 1+2 | Progressive compiler rewrite in RBASIC |
+| 5 | Phase 1+2 | Self-hosting (autocompilation) |
+| 6 | — | Native LLVM/Cranelift backend |
+| 7 | Phase 3 | Generics, Optional, Result |
 
 ---
 
-## 7. RBA — RBasic for Applications
+## 8. RBA — RBasic for Applications
 
 RBA is an embedded variant of RBASIC designed to act as a scripting engine in open-source office suites:
 
@@ -131,13 +152,23 @@ RBA shares the same linguistic core as RBASIC but includes a standard library or
 
 ---
 
-## 8. Acceptance Criteria
+## 9. RBScript
+
+RBScript is a scripting language inspired by VBScript, designed to provide automation and scripting capabilities within the RBASIC ecosystem. It shares the same core language as RBASIC and RBA, targeting environments where a lightweight, embeddable scripting engine is needed.
+
+---
+
+## 10. Acceptance Criteria
 
 ```text
 ✓ Vision and goals documented
+✓ QuickBASIC is source of truth for core features
 ✓ Architecture defined
 ✓ Backend strategy defined
-✓ Evolution stages defined
+✓ Compilation modes defined
+✓ Three-phase implementation model defined
+✓ Evolution stages defined (7 stages)
 ✓ RBA vision defined
+✓ RBScript defined
 ✓ Aligned with DOCUMENTO_DE_INTENCION.md
 ```

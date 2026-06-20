@@ -20,6 +20,7 @@ pub enum Statement {
     If {
         condition: Expression,
         then_branch: Vec<Statement>,
+        else_ifs: Vec<ElseIfClause>,
         else_branch: Option<Vec<Statement>>,
     },
     While {
@@ -76,15 +77,118 @@ pub enum Statement {
         params: Vec<Param>,
         body: Vec<Statement>,
     },
+    Call {
+        name: String,
+        args: Vec<Expression>,
+    },
     Resume {
         label: Option<String>,
     },
+    // File I/O
+    Open {
+        filename: Expression,
+        mode: FileMode,
+        handle: Expression,
+        record_len: Option<Expression>,
+    },
+    Close {
+        handles: Vec<Expression>,
+    },
+    InputHash {
+        handle: Expression,
+        targets: Vec<String>,
+    },
+    PrintHash {
+        handle: Expression,
+        items: Vec<PrintItem>,
+    },
+    LineInputHash {
+        handle: Expression,
+        target: String,
+    },
+    // SELECT CASE
+    SelectCase {
+        expr: Expression,
+        cases: Vec<CaseClause>,
+        else_case: Option<Vec<Statement>>,
+    },
+    // Control flow
+    ExitFor,
+    ExitWhile,
+    ExitDo,
+    Goto {
+        label: String,
+    },
+    Gosub {
+        label: String,
+    },
+    Label {
+        name: String,
+    },
+    // OPTION
+    OptionExplicit,
+    OptionBase {
+        base: i64,
+    },
+    // TYPE...END TYPE
+    TypeDecl {
+        name: String,
+        fields: Vec<TypeField>,
+    },
+    // PEEK/POKE
+    Poke {
+        addr: Expression,
+        value: Expression,
+    },
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct ElseIfClause {
+    pub condition: Expression,
+    pub body: Vec<Statement>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct CaseClause {
+    pub values: Vec<CaseValue>,
+    pub body: Vec<Statement>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum CaseValue {
+    Single(Expression),
+    Range(Expression, Expression),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum FileMode {
+    Input,
+    Output,
+    Append,
+    Random,
+    Binary,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum PrintItem {
+    Expr(Expression),
+    Comma, // Tab to next zone
+    Semi,  // No separator
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum ParamKind {
+    ByVal,
+    ByRef,
+    Optional,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Param {
     pub name: String,
     pub typ: TypeRef,
+    pub kind: ParamKind,
+    pub default: Option<Expression>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -112,6 +216,9 @@ pub enum Expression {
     ArrayAccess {
         name: String,
         indices: Vec<Expression>,
+    },
+    Peek {
+        addr: Box<Expression>,
     },
 }
 
@@ -147,8 +254,8 @@ pub enum BinaryOp {
     And,
     Or,
     Xor,
-    Shl, // Shift left
-    Shr, // Shift right
+    Shl,
+    Shr,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -177,12 +284,25 @@ pub struct TypeRef {
 #[derive(Debug, PartialEq, Clone)]
 pub struct ArrayType {
     pub base_type: Box<TypeRef>,
-    pub dimensions: Vec<Expression>, // Array sizes
+    pub dimensions: Vec<Expression>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ArrayDecl {
     pub name: String,
     pub array_type: ArrayType,
-    pub init: Option<Expression>, // Optional initialization
+    pub init: Option<Expression>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct TypeField {
+    pub name: String,
+    pub typ: TypeRef,
+    pub visibility: Option<FieldVisibility>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum FieldVisibility {
+    Public,
+    Private,
 }
