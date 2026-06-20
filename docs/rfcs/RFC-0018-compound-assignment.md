@@ -1,6 +1,6 @@
 # RFC-0018: Compound Assignment Operators
 
-Status: Draft
+Status: Accepted
 Version: 0.1
 Author: RBASIC Project
 Created: 2026-06-19

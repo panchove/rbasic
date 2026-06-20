@@ -1,4 +1,6 @@
-use crate::parser::ast::{BinaryOp, Expression, Literal, Program, Statement, UnaryOp};
+use crate::parser::ast::{
+    BinaryOp, CompoundAssignOp, Expression, Literal, Program, Statement, UnaryOp,
+};
 use crate::semantic::errors::{SemanticError, SemanticErrorCode};
 use crate::semantic::types::Type;
 use std::collections::HashMap;
@@ -1070,6 +1072,56 @@ pub fn analyze(prog: &Program) -> Result<ArrayInfo, Vec<SemanticError>> {
                             );
                         }
                     }
+                }
+            }
+            Statement::AssignOp { name, op, expr } => {
+                let key = name.to_lowercase();
+                if let Some((var_type, is_mut)) = locals.get(&key).cloned() {
+                    if !is_mut {
+                        err(
+                            errors,
+                            SemanticErrorCode::E1044,
+                            format!("Compound assignment to immutable variable {}", name),
+                        );
+                    }
+                    let binary_op = match op {
+                        CompoundAssignOp::AddEq => BinaryOp::Add,
+                        CompoundAssignOp::SubEq => BinaryOp::Sub,
+                        CompoundAssignOp::MulEq => BinaryOp::Mul,
+                        CompoundAssignOp::DivEq => BinaryOp::Div,
+                        CompoundAssignOp::IntDivEq => BinaryOp::IntDiv,
+                        CompoundAssignOp::ModEq => BinaryOp::Mod,
+                    };
+                    let op_sym = match op {
+                        CompoundAssignOp::AddEq => "+",
+                        CompoundAssignOp::SubEq => "-",
+                        CompoundAssignOp::MulEq => "*",
+                        CompoundAssignOp::DivEq => "/",
+                        CompoundAssignOp::IntDivEq => "\\",
+                        CompoundAssignOp::ModEq => "MOD",
+                    };
+                    let rhs_type = resolve_expr(expr, locals, globals, functions, arrays, errors);
+                    if let Some(rhs) = &rhs_type {
+                        if !binary_op_valid(&binary_op, &var_type, rhs) {
+                            err(
+                                errors,
+                                SemanticErrorCode::E1045,
+                                format!(
+                                    "Compound assignment type mismatch: {} {}= {}",
+                                    var_type.to_rust_str(),
+                                    op_sym,
+                                    rhs.to_rust_str()
+                                ),
+                            );
+                        }
+                    }
+                } else {
+                    err(
+                        errors,
+                        SemanticErrorCode::E1043,
+                        format!("Compound assignment to undeclared variable {}", name),
+                    );
+                    resolve_expr(expr, locals, globals, functions, arrays, errors);
                 }
             }
             Statement::ArrayAssign {

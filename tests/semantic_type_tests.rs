@@ -904,4 +904,61 @@ mod tests {
     fn builtin_unknown_fails() {
         assert!(has_error("PRINT FOO$(\"hello\")", "E1003"));
     }
+
+    // ---- RFC-0018: Compound Assignment Operators ----
+
+    #[test]
+    fn compound_assign_add_ok() {
+        assert!(analyze_src("LET MUT x: I32 = 0\nx += 1").is_ok());
+    }
+
+    #[test]
+    fn compound_assign_sub_ok() {
+        assert!(analyze_src("LET MUT x: I32 = 10\nx -= 3").is_ok());
+    }
+
+    #[test]
+    fn compound_assign_mul_ok() {
+        assert!(analyze_src("LET MUT x: I32 = 4\nx *= 2").is_ok());
+    }
+
+    #[test]
+    fn compound_assign_div_ok() {
+        assert!(analyze_src("LET MUT x: I32 = 8\nx /= 2").is_ok());
+    }
+
+    #[test]
+    fn compound_assign_intdiv_ok() {
+        assert!(analyze_src("LET MUT x: I32 = 8\nx \\= 3").is_ok());
+    }
+
+    #[test]
+    fn compound_assign_mod_ok() {
+        assert!(analyze_src("LET MUT x: I32 = 8\nx MOD= 3").is_ok());
+    }
+
+    #[test]
+    fn compound_assign_string_concat_ok() {
+        assert!(analyze_src("LET MUT s: STRING = \"hello\"\ns += \" world\"").is_ok());
+    }
+
+    #[test]
+    fn compound_assign_undeclared_fails() {
+        assert!(has_error("x += 1", "E1043"));
+    }
+
+    #[test]
+    fn compound_assign_immutable_fails() {
+        assert!(has_error("LET x: I32 = 0\nx += 1", "E1044"));
+    }
+
+    #[test]
+    fn compound_assign_string_plus_int_fails() {
+        assert!(has_error("LET MUT s: STRING = \"hello\"\ns += 1", "E1045"));
+    }
+
+    #[test]
+    fn compound_assign_float_intdiv_fails() {
+        assert!(has_error("LET MUT x: F64 = 8.0\nx \\= 2", "E1045"));
+    }
 }

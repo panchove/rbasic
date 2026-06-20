@@ -73,12 +73,18 @@ pub enum TokenKind {
     Minus,
     Star,
     Slash,
-    Caret,      // ^
-    Backslash,  // \
-    Mod,        // MOD
-    Assign,     // =
-    EqualEqual, // ==
-    NotEqual,   // !=
+    Caret,          // ^
+    Backslash,      // \
+    Mod,            // MOD
+    Assign,         // =
+    PlusEqual,      // +=
+    MinusEqual,     // -=
+    StarEqual,      // *=
+    SlashEqual,     // /=
+    BackslashEqual, // \=
+    ModEqual,       // MOD=
+    EqualEqual,     // ==
+    NotEqual,       // !=
     Less,
     LessEqual,
     Greater,
@@ -146,6 +152,12 @@ impl fmt::Display for TokenKind {
             Shl => "SHL",
             Shr => "SHR",
             Assign => "=",
+            PlusEqual => "+=",
+            MinusEqual => "-=",
+            StarEqual => "*=",
+            SlashEqual => "/=",
+            BackslashEqual => "\\=",
+            ModEqual => "MOD=",
             EqualEqual => "==",
             NotEqual => "!=",
             Less => "<",

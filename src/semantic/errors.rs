@@ -19,6 +19,9 @@ pub enum SemanticErrorCode {
     E1040,
     E1041,
     E1042,
+    E1043,
+    E1044,
+    E1045,
     E1060,
     E1061,
     E1062,
@@ -58,6 +61,9 @@ impl PartialEq<&'static str> for SemanticErrorCode {
                 | (SemanticErrorCode::E1040, "E1040")
                 | (SemanticErrorCode::E1041, "E1041")
                 | (SemanticErrorCode::E1042, "E1042")
+                | (SemanticErrorCode::E1043, "E1043")
+                | (SemanticErrorCode::E1044, "E1044")
+                | (SemanticErrorCode::E1045, "E1045")
                 | (SemanticErrorCode::E1060, "E1060")
                 | (SemanticErrorCode::E1061, "E1061")
                 | (SemanticErrorCode::E1062, "E1062")

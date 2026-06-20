@@ -565,4 +565,46 @@ END WHILE
         let out = compile("LET MUT x: I32 = LEN(\"hello\")");
         assert!(out.contains("let mut x: i32 = \"hello\".to_string().len() as i32;"));
     }
+
+    #[test]
+    fn test_compound_assign_add_codegen() {
+        let out = compile("LET MUT x: I32 = 0\nx += 1");
+        assert!(out.contains("x = x + 1;"));
+    }
+
+    #[test]
+    fn test_compound_assign_sub_codegen() {
+        let out = compile("LET MUT x: I32 = 10\nx -= 3");
+        assert!(out.contains("x = x - 3;"));
+    }
+
+    #[test]
+    fn test_compound_assign_mul_codegen() {
+        let out = compile("LET MUT x: I32 = 4\nx *= 2");
+        assert!(out.contains("x = x * 2;"));
+    }
+
+    #[test]
+    fn test_compound_assign_div_codegen() {
+        let out = compile("LET MUT x: I32 = 8\nx /= 2");
+        assert!(out.contains("x = x / 2;"));
+    }
+
+    #[test]
+    fn test_compound_assign_intdiv_codegen() {
+        let out = compile("LET MUT x: I32 = 8\nx \\= 3");
+        assert!(out.contains("x = x / 3;"));
+    }
+
+    #[test]
+    fn test_compound_assign_mod_codegen() {
+        let out = compile("LET MUT x: I32 = 8\nx MOD= 3");
+        assert!(out.contains("x = x % 3;"));
+    }
+
+    #[test]
+    fn test_compound_assign_string_codegen() {
+        let out = compile("LET MUT s: STRING = \"hello\"\ns += \" world\"");
+        assert!(out.contains("s = s + \" world\".to_string();"));
+    }
 }

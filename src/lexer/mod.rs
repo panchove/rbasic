@@ -23,12 +23,47 @@ pub fn lex(input: &str) -> (Vec<Token>, Vec<LexError>) {
         }
         // Simple single-character tokens
         let kind = match ch {
-            '+' => TokenKind::Plus,
-            '-' => TokenKind::Minus,
-            '*' => TokenKind::Star,
-            '/' => TokenKind::Slash,
+            '+' => {
+                if let Some('=') = chars.peek().map(|(_, c)| *c) {
+                    chars.next();
+                    TokenKind::PlusEqual
+                } else {
+                    TokenKind::Plus
+                }
+            }
+            '-' => {
+                if let Some('=') = chars.peek().map(|(_, c)| *c) {
+                    chars.next();
+                    TokenKind::MinusEqual
+                } else {
+                    TokenKind::Minus
+                }
+            }
+            '*' => {
+                if let Some('=') = chars.peek().map(|(_, c)| *c) {
+                    chars.next();
+                    TokenKind::StarEqual
+                } else {
+                    TokenKind::Star
+                }
+            }
+            '/' => {
+                if let Some('=') = chars.peek().map(|(_, c)| *c) {
+                    chars.next();
+                    TokenKind::SlashEqual
+                } else {
+                    TokenKind::Slash
+                }
+            }
             '^' => TokenKind::Caret,
-            '\\' => TokenKind::Backslash,
+            '\\' => {
+                if let Some('=') = chars.peek().map(|(_, c)| *c) {
+                    chars.next();
+                    TokenKind::BackslashEqual
+                } else {
+                    TokenKind::Backslash
+                }
+            }
             ':' => TokenKind::Colon,
             ',' => TokenKind::Comma,
             '(' => TokenKind::LParen,
@@ -280,7 +315,15 @@ pub fn lex(input: &str) -> (Vec<Token>, Vec<LexError>) {
                     "LOOP" => TokenKind::Loop,
                     "UNTIL" => TokenKind::Until,
                     "AS" => TokenKind::As,
-                    "MOD" => TokenKind::Mod,
+                    "MOD" => {
+                        if let Some(&(idx, '=')) = chars.peek() {
+                            chars.next();
+                            end = idx + 1;
+                            TokenKind::ModEqual
+                        } else {
+                            TokenKind::Mod
+                        }
+                    }
                     "DIM" => TokenKind::Dim,
                     "ON" => TokenKind::On,
                     "ERROR" => TokenKind::Error,

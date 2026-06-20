@@ -391,4 +391,60 @@ mod tests {
         assert!(matches!(&tokens[0].kind, TokenKind::Identifier(s) if s == "_myVar"));
         assert!(matches!(&tokens[1].kind, TokenKind::Identifier(s) if s == "counter_1"));
     }
+
+    #[test]
+    fn keyword_plus_equal() {
+        let (tokens, errors) = lex("x += 1");
+        assert!(errors.is_empty());
+        assert_eq!(tokens[1].kind, TokenKind::PlusEqual);
+    }
+
+    #[test]
+    fn keyword_minus_equal() {
+        let (tokens, errors) = lex("x -= 1");
+        assert!(errors.is_empty());
+        assert_eq!(tokens[1].kind, TokenKind::MinusEqual);
+    }
+
+    #[test]
+    fn keyword_star_equal() {
+        let (tokens, errors) = lex("x *= 2");
+        assert!(errors.is_empty());
+        assert_eq!(tokens[1].kind, TokenKind::StarEqual);
+    }
+
+    #[test]
+    fn keyword_slash_equal() {
+        let (tokens, errors) = lex("x /= 2");
+        assert!(errors.is_empty());
+        assert_eq!(tokens[1].kind, TokenKind::SlashEqual);
+    }
+
+    #[test]
+    fn keyword_backslash_equal() {
+        let (tokens, errors) = lex("x \\= 2");
+        assert!(errors.is_empty());
+        assert_eq!(tokens[1].kind, TokenKind::BackslashEqual);
+    }
+
+    #[test]
+    fn keyword_mod_equal() {
+        let (tokens, errors) = lex("x MOD= 3");
+        assert!(errors.is_empty());
+        assert_eq!(tokens[1].kind, TokenKind::ModEqual);
+    }
+
+    #[test]
+    fn plus_without_equal_is_plus() {
+        let (tokens, errors) = lex("x + 1");
+        assert!(errors.is_empty());
+        assert_eq!(tokens[1].kind, TokenKind::Plus);
+    }
+
+    #[test]
+    fn mod_without_equal_is_mod() {
+        let (tokens, errors) = lex("x MOD 3");
+        assert!(errors.is_empty());
+        assert_eq!(tokens[1].kind, TokenKind::Mod);
+    }
 }

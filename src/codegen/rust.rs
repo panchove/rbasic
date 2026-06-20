@@ -1,7 +1,7 @@
 use std::fmt::Write;
 
 use crate::parser::ast::{
-    BinaryOp, DoLoopVariant, Expression, Literal, Program, Statement, UnaryOp,
+    BinaryOp, CompoundAssignOp, DoLoopVariant, Expression, Literal, Program, Statement, UnaryOp,
 };
 use crate::semantic::types::Type;
 
@@ -291,6 +291,24 @@ fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
                 }
                 out.push_str(";\n");
             }
+        }
+        Statement::AssignOp { name, op, expr } => {
+            // Desugar: x += y  →  x = x + y
+            out.push_str(&pad);
+            out.push_str(name);
+            out.push_str(" = ");
+            out.push_str(name);
+            let op_str = match op {
+                CompoundAssignOp::AddEq => " + ",
+                CompoundAssignOp::SubEq => " - ",
+                CompoundAssignOp::MulEq => " * ",
+                CompoundAssignOp::DivEq => " / ",
+                CompoundAssignOp::IntDivEq => " / ",
+                CompoundAssignOp::ModEq => " % ",
+            };
+            out.push_str(op_str);
+            gen_expr(expr, out);
+            out.push_str(";\n");
         }
         Statement::ArrayAssign {
             name,

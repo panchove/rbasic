@@ -307,12 +307,17 @@ impl Parser {
                         });
                     }
                 }
-                let next_is_assign = self
-                    .tokens
-                    .get(self.current + 1)
-                    .map(|t| t.kind == TokenKind::Assign)
-                    .unwrap_or(false);
-                if next_is_assign {
+                let next_kind = self.tokens.get(self.current + 1).map(|t| &t.kind).cloned();
+                let compound_op = match &next_kind {
+                    Some(TokenKind::PlusEqual) => Some(CompoundAssignOp::AddEq),
+                    Some(TokenKind::MinusEqual) => Some(CompoundAssignOp::SubEq),
+                    Some(TokenKind::StarEqual) => Some(CompoundAssignOp::MulEq),
+                    Some(TokenKind::SlashEqual) => Some(CompoundAssignOp::DivEq),
+                    Some(TokenKind::BackslashEqual) => Some(CompoundAssignOp::IntDivEq),
+                    Some(TokenKind::ModEqual) => Some(CompoundAssignOp::ModEq),
+                    _ => None,
+                };
+                if next_kind == Some(TokenKind::Assign) {
                     let id = self.advance();
                     let name = if let TokenKind::Identifier(s) = id.kind {
                         s
@@ -322,6 +327,16 @@ impl Parser {
                     self.advance(); // consume =
                     let expr = self.expression()?;
                     Ok(Statement::Assign { name, expr })
+                } else if let Some(op) = compound_op {
+                    let id = self.advance();
+                    let name = if let TokenKind::Identifier(s) = id.kind {
+                        s
+                    } else {
+                        unreachable!()
+                    };
+                    self.advance(); // consume compound operator
+                    let expr = self.expression()?;
+                    Ok(Statement::AssignOp { name, op, expr })
                 } else {
                     let expr = self.expression()?;
                     Ok(Statement::ExpressionStmt { expr })

@@ -7,7 +7,13 @@ The format is based on Keep a Changelog.
 ## [Unreleased]
 
 ### Added
-- RFC-0018: Compound Assignment Operators (Draft)
+- RFC-0018: Compound Assignment Operators (Accepted + implemented)
+- Compound assignment operators: `+=`, `-=`, `*=`, `/=`, `\=`, `MOD=`
+- Lexer: longest-match tokens `PlusEqual`, `MinusEqual`, `StarEqual`, `SlashEqual`, `BackslashEqual`, `ModEqual`
+- AST: `Statement::AssignOp { name, op: CompoundAssignOp, expr }` variant
+- Semantic: E1043 (undeclared target), E1044 (immutable target), E1045 (type mismatch); reuses binary op rules
+- Codegen: desugared to `x = x OP expr`
+- 28 new tests: 8 lexer, 2 parser, 11 semantic, 7 codegen (405 total)
 - Diagnostic registry: `docs/diagnostics/README.md`
 - Architecture documents: `docs/architecture/array-indexing-gap-analysis.md`, `docs/architecture/roadmap-v0.2-to-v1.0.md`
 

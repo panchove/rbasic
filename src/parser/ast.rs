@@ -45,6 +45,11 @@ pub enum Statement {
         name: String,
         expr: Expression,
     },
+    AssignOp {
+        name: String,
+        op: CompoundAssignOp,
+        expr: Expression,
+    },
     ArrayAssign {
         name: String,
         indices: Vec<Expression>,
@@ -135,6 +140,16 @@ pub enum BinaryOp {
     Xor,
     Shl, // Shift left
     Shr, // Shift right
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum CompoundAssignOp {
+    AddEq,
+    SubEq,
+    MulEq,
+    DivEq,
+    IntDivEq,
+    ModEq,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

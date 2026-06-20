@@ -603,4 +603,38 @@ END FOR
             _ => panic!("expected Print"),
         }
     }
+
+    #[test]
+    fn test_compound_assign_add() {
+        use rbasic::{CompoundAssignOp, Statement};
+        let src = "LET MUT x: I32 = 0\nx += 1";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        assert!(matches!(
+            &prog.statements[1],
+            Statement::AssignOp { name, op: CompoundAssignOp::AddEq, .. } if name == "x"
+        ));
+    }
+
+    #[test]
+    fn test_compound_assign_all_ops() {
+        use rbasic::{CompoundAssignOp, Statement};
+        let cases = [
+            ("x -= 1", CompoundAssignOp::SubEq),
+            ("x *= 2", CompoundAssignOp::MulEq),
+            ("x /= 2", CompoundAssignOp::DivEq),
+            ("x \\= 2", CompoundAssignOp::IntDivEq),
+            ("x MOD= 3", CompoundAssignOp::ModEq),
+        ];
+        for (src, expected_op) in &cases {
+            let tokens = lex(src);
+            let mut parser = Parser::new(tokens);
+            let prog = parser.parse_program().expect("parse error");
+            match &prog.statements[0] {
+                Statement::AssignOp { op, .. } => assert_eq!(op, expected_op, "failed for {}", src),
+                other => panic!("expected AssignOp for {}, got {:?}", src, other),
+            }
+        }
+    }
 }
