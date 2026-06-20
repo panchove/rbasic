@@ -13,14 +13,14 @@ This repository does not currently use OpenCode agents.
 - Agents must review the CHANGELOG before starting work and update it after completing modifications.
 - The CHANGELOG complements RFCs: RFC → implementation → CHANGELOG entry.
 
-## Language Version Freeze
+## Language Version
 
-Current Language Target: RBASIC v0.1
+Current Language Target: RBASIC v0.2
 
 Status:
-- Experimental
-- Pre-Alpha
-- Bootstrap Phase
+- **Implemented** — v0.2 features: Standalone Assignment (RFC-0015), DIM Array Codegen (RFC-0016), String Functions (RFC-0017)
+- 363 tests passing (`make verify` succeeds)
+- 17 RFCs (1–17) accepted and implemented
 
 ## RFC Requirement for Language Changes
 
