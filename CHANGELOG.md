@@ -7,6 +7,7 @@ The format is based on Keep a Changelog.
 ## [Unreleased]
 
 ### Added
+
 - RFC-0018: Compound Assignment Operators (Accepted + implemented)
 - Compound assignment operators: `+=`, `-=`, `*=`, `/=`, `\=`, `MOD=`
 - Lexer: longest-match tokens `PlusEqual`, `MinusEqual`, `StarEqual`, `SlashEqual`, `BackslashEqual`, `ModEqual`
@@ -18,6 +19,7 @@ The format is based on Keep a Changelog.
 - Architecture documents: `docs/architecture/array-indexing-gap-analysis.md`, `docs/architecture/roadmap-v0.2-to-v1.0.md`
 
 ### Compliance Fixes (RFC Audit)
+
 - **P0**: Lexer now restricts `$` to trailing-only suffix — `na$me`, `foo$$`, `abc$def` produce lex errors (RFC-0002 compliance)
 - **P0**: Parser now accepts `DIM arr(n) AS <TYPE>` syntax; default remains INTEGER when omitted (RFC-0012/RFC-0016 compliance)
 - **P1**: Duplicate DIM array variable now emits E1002 instead of E1003, matching duplicate variable convention (RFC-0006 compliance)
@@ -25,6 +27,7 @@ The format is based on Keep a Changelog.
 - 14 new tests: 4 lexer, 3 parser, 4 semantic type, 3 codegen (377 total, up from 363)
 
 ### Changed
+
 - RFC-0002: Updated identifier rules to allow optional trailing `$` suffix; added `identifier ::= [A-Za-z_][A-Za-z0-9_]*[$]?` grammar
 - RFC-0004: Added `assign_stmt` grammar rule; updated `statement` production to include standalone assignment; renumbered sections
 - RFC-0005: Added `Statement::Assign` variant to AST specification; updated variant count from 12 to 13
@@ -52,6 +55,7 @@ The format is based on Keep a Changelog.
 - 20 semantic tests + 20 codegen tests for string functions
 
 ### Changed
+
 - Updated RFC-0002 token inventory with all v0.1 tokens (Step, Do, Loop, Until, As, And, Or, Xor, Dim, On, Error, Goto, Resume, Shl, Shr, Caret, Backslash, Mod, BoolLiteral)
 - Updated RFC-0004 grammar with FOR/STEP, DO/LOOP variants, DIM, ON ERROR, RESUME, extended operators (^, \, MOD, SHL, SHR), AS cast, NOT unary, logical AND/OR/XOR
 - Updated RFC-0005 AST with For, DoLoop, Dim, OnError, Resume, Cast expression, Not unary, extended BinaryOp
@@ -61,6 +65,7 @@ The format is based on Keep a Changelog.
 - Fixed RFC-0008 creation date (2026-07-01 → 2026-06-19)
 
 ### Added
+
 - RFC-0012: DIM Array Declarations (Accepted)
 - RFC-0013: ON ERROR / RESUME Statements (Accepted)
 - RFC-0011 added to docs/rfcs/README.md index
@@ -68,6 +73,7 @@ The format is based on Keep a Changelog.
 - Updated CLAUDE.md with v0.1 completion status
 
 ### Added
+
 - 74 new tests covering previously untested v0.1 features (303 total, up from 229):
   - Lexer: bool literals, all extended keywords (STEP, DO, LOOP, UNTIL, AS, AND, OR, XOR, DIM, ON, ERROR, GOTO, RESUME, SHL, SHR, MOD), operators (^, \\), UTF-8 encoding, reserved word handling, END sequences, identifier with underscore, case-insensitive extended keywords
   - Parser: DIM (single, multiple, multi-dim), ON ERROR GOTO, RESUME (bare/label), DO UNTIL/LOOP UNTIL, AND/OR/XOR binary, SHL/SHR, NOT unary, TRUE/FALSE literals, POW/MOD/IntDiv operators, AS cast, multiple functions, operator precedence
@@ -96,19 +102,23 @@ The format is based on Keep a Changelog.
 - Integration tests: compile and execute all examples end-to-end
 
 ### Changed
+
 - RFC-0002: `BangEqual` → `NotEqual` in token inventory (aligns with `TokenKind::NotEqual`)
 - RFC-0007: documented implicit integer widening rules (I8→I64, U8→U64, F32↔F64)
 - `rbasic run`: cleans up temporary `.rs` and binary files after execution
 
 ### Fixed
+
 - Restored semantic module scaffolding required for successful compilation
 
 ### Removed
+
 - `src/codegen/c.rs` (replaced by `rust.rs`)
 
 ## [0.1.0] - 2026-06-17
 
 ### Added
+
 - Initial repository structure
 - AGENTS.md, README.md
 - RFC-0001 Vision and Goals

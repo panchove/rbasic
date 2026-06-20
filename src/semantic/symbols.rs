@@ -9,6 +9,7 @@ pub struct Symbol {
 pub enum SymbolKind {
     Variable,
     Function,
+    Subroutine,
 }
 
 #[derive(Debug, Default)]

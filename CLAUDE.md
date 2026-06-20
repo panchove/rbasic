@@ -36,7 +36,7 @@ cargo run -- run     examples/hello.rbas           # compile via rustc and execu
 
 The compiler is a classic single-pass pipeline. Each stage is a separate module under `src/`:
 
-```
+```text
 .rbas source
   └─ lexer::lex()             → Vec<Token>               (src/lexer/)
        └─ Parser::parse_program()  → Program (AST)        (src/parser/)

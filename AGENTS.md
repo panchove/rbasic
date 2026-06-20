@@ -2,7 +2,7 @@
 
 Proyecto: RBASIC
 
-This repository does not currently use OpenCode agents.
+This repository is managed with OpenCode. Follow the local conventions below.
 
 ## CHANGELOG Policy
 
@@ -70,9 +70,13 @@ This applies especially to debates about:
 - Generics
 - Ownership
 
-## Build Automation Policy
+## Commands
 
-- The repository SHALL provide a Makefile.
-- Developers SHOULD use Make targets instead of invoking Cargo manually.
-- Milestones cannot be marked as completed until the corresponding verification target succeeds.
-- `make verify` is the official validation command.
+- `make check` – cargo check
+- `make test` – cargo test
+- `make build` – cargo build
+- `make run` – cargo run
+- `make fmt` – cargo fmt
+- `make lint` – cargo clippy with warnings as errors
+- `make verify` – fmt‑check, lint, test
+- Granular tests: `make test-lexer`, `make test-parser`, `make test-semantic`, `make test-types`, `make test-all`.

@@ -2,6 +2,7 @@ pub mod codegen;
 pub mod diagnostics;
 pub mod lexer;
 pub mod parser;
+pub mod runtime;
 pub mod semantic;
 
 pub use codegen::rust::generate_rust;

@@ -71,6 +71,11 @@ pub enum Statement {
         prompt: Option<String>,
         target: String,
     },
+    SubDecl {
+        name: String,
+        params: Vec<Param>,
+        body: Vec<Statement>,
+    },
     Resume {
         label: Option<String>,
     },

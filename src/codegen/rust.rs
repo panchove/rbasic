@@ -369,37 +369,36 @@ fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize, types: &HashMap<S
         Statement::OnError { .. } => {}
         Statement::Input { prompt, target } => {
             out.push_str(&pad);
-            out.push_str("{\n");
-            let inner = "    ".repeat(indent + 1);
-            out.push_str(&inner);
-            out.push_str("let mut __buf__ = String::new();\n");
-            if let Some(p) = prompt {
-                out.push_str(&inner);
-                out.push_str("print!(\"");
-                out.push_str(&escape_string(p));
-                out.push_str("\");\n");
-                out.push_str(&inner);
-                out.push_str("std::io::Write::flush(&mut std::io::stdout()).unwrap();\n");
-            }
-            out.push_str(&inner);
-            out.push_str("std::io::stdin().read_line(&mut __buf__).unwrap();\n");
-            out.push_str(&inner);
-            out.push_str(target);
-            out.push_str(" = ");
-            match types.get(&target.to_lowercase()) {
-                Some(Type::String) => out.push_str("__buf__.trim().to_string()"),
-                Some(Type::Bool) => {
-                    out.push_str("matches!(__buf__.trim().to_ascii_uppercase().as_str(), \"TRUE\")")
+            let prompt_expr = match prompt {
+                Some(p) => format!("Some(\"{}\")", p.replace('"', "\\\"")),
+                None => "None".to_string(),
+            };
+            let var_type = types
+                .get(&target.to_lowercase())
+                .expect("type for INPUT target not found");
+            let call = match var_type {
+                Type::I32 => format!(
+                    "{} = rbasic::runtime::io::input_i32({});",
+                    target, prompt_expr
+                ),
+                Type::String => format!(
+                    "{} = rbasic::runtime::io::input_string({});",
+                    target, prompt_expr
+                ),
+                Type::Bool => format!(
+                    "{} = rbasic::runtime::io::input_bool({});",
+                    target, prompt_expr
+                ),
+                _ => {
+                    // Fallback for other types if they are added in the future
+                    format!(
+                        "{} = rbasic::runtime::io::read_line({}).parse().unwrap();",
+                        target, prompt_expr
+                    )
                 }
-                Some(Type::I32) => out.push_str("__buf__.trim().parse::<i32>().unwrap()"),
-                Some(Type::I64) => out.push_str("__buf__.trim().parse::<i64>().unwrap()"),
-                Some(Type::F64) => out.push_str("__buf__.trim().parse::<f64>().unwrap()"),
-                Some(Type::U8) => out.push_str("__buf__.trim().parse::<u8>().unwrap()"),
-                _ => out.push_str("__buf__.trim().parse().unwrap()"),
-            }
-            out.push_str(";\n");
-            out.push_str(&pad);
-            out.push_str("}\n");
+            };
+            out.push_str(&call);
+            out.push('\n');
         }
         Statement::Resume { .. } => {}
     }
