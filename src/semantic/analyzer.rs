@@ -1214,6 +1214,45 @@ pub fn analyze(prog: &Program) -> Result<ArrayInfo, Vec<SemanticError>> {
             Statement::OnError { .. } => {
                 // ON ERROR GOTO — no semantic validation in v0.1
             }
+            Statement::Input { target, .. } => {
+                let key = target.to_lowercase();
+                match locals.get(&key) {
+                    None => err(
+                        errors,
+                        SemanticErrorCode::E1050,
+                        format!("INPUT target '{}' is not declared", target),
+                    ),
+                    Some((ty, is_mut)) => {
+                        if !is_mut {
+                            err(
+                                errors,
+                                SemanticErrorCode::E1051,
+                                format!("INPUT target '{}' is not mutable", target),
+                            );
+                        }
+                        let supported = matches!(
+                            ty,
+                            Type::String
+                                | Type::I32
+                                | Type::I64
+                                | Type::F64
+                                | Type::Bool
+                                | Type::U8
+                        );
+                        if !supported {
+                            err(
+                                errors,
+                                SemanticErrorCode::E1052,
+                                format!(
+                                    "INPUT does not support type {} for variable '{}'",
+                                    ty.to_rust_str(),
+                                    target
+                                ),
+                            );
+                        }
+                    }
+                }
+            }
             Statement::Resume { .. } => {
                 // RESUME — no semantic validation in v0.1
             }

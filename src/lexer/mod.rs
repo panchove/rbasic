@@ -331,6 +331,7 @@ pub fn lex(input: &str) -> (Vec<Token>, Vec<LexError>) {
                     "RESUME" => TokenKind::Resume,
                     "SHL" => TokenKind::Shl,
                     "SHR" => TokenKind::Shr,
+                    "INPUT" => TokenKind::Input,
                     _ => TokenKind::Identifier(ident),
                 };
                 tokens.push(Token {

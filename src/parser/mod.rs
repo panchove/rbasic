@@ -213,6 +213,43 @@ impl Parser {
         Ok(Statement::OnError { label })
     }
 
+    fn input_stmt(&mut self) -> Result<Statement, ParseError> {
+        self.expect(TokenKind::Input, "expected INPUT")?;
+        // Check for optional prompt string
+        let (prompt, target) = if let TokenKind::StringLit(_) = self.peek().kind.clone() {
+            // Consume the string literal
+            let prompt_str = if let TokenKind::StringLit(p) = self.advance().kind {
+                p
+            } else {
+                unreachable!();
+            };
+            // Expect comma
+            self.expect(TokenKind::Comma, "expected ',' after INPUT prompt")?;
+            // Expect identifier for target
+            let target_name = if let TokenKind::Identifier(name) = self.advance().kind {
+                name
+            } else {
+                return Err(ParseError {
+                    message: "expected identifier after INPUT prompt,".into(),
+                    span: self.peek().span,
+                });
+            };
+            (Some(prompt_str), target_name)
+        } else {
+            // Expect identifier directly
+            let target_name = if let TokenKind::Identifier(name) = self.advance().kind {
+                name
+            } else {
+                return Err(ParseError {
+                    message: "expected identifier after INPUT".into(),
+                    span: self.peek().span,
+                });
+            };
+            (None, target_name)
+        };
+        Ok(Statement::Input { prompt, target })
+    }
+
     fn resume_stmt(&mut self) -> Result<Statement, ParseError> {
         self.expect(TokenKind::Resume, "expected RESUME")?;
         let label = if matches!(self.peek().kind, TokenKind::Identifier(_)) {
@@ -273,6 +310,7 @@ impl Parser {
             TokenKind::Do => self.do_stmt(),
             TokenKind::On => self.on_error_stmt(),
             TokenKind::Resume => self.resume_stmt(),
+            TokenKind::Input => self.input_stmt(),
             TokenKind::Identifier(_) => {
                 // Check for array assignment: arr(0) = 42
                 let next_is_lparen = self

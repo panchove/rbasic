@@ -607,4 +607,36 @@ END WHILE
         let out = compile("LET MUT s: STRING = \"hello\"\ns += \" world\"");
         assert!(out.contains("s = s + \" world\".to_string();"));
     }
+
+    // ---- RFC-0019: INPUT codegen ----
+
+    #[test]
+    fn test_input_string_codegen() {
+        let out = compile("LET MUT s: STRING = \"\"\nINPUT s");
+        assert!(out.contains("read_line"));
+        assert!(out.contains("trim().to_string()"));
+    }
+
+    #[test]
+    fn test_input_integer_codegen() {
+        let out = compile("LET MUT n: I32 = 0\nINPUT n");
+        assert!(out.contains("read_line"));
+        assert!(out.contains("parse::<i32>()"));
+    }
+
+    #[test]
+    fn test_input_with_prompt_codegen() {
+        let out = compile("LET MUT n: I32 = 0\nINPUT \"Enter n: \", n");
+        assert!(out.contains("print!(\"Enter n: \")"));
+        assert!(out.contains("flush"));
+        assert!(out.contains("read_line"));
+        assert!(out.contains("parse::<i32>()"));
+    }
+
+    #[test]
+    fn test_input_bool_codegen() {
+        let out = compile("LET MUT b: BOOLEAN = FALSE\nINPUT b");
+        assert!(out.contains("read_line"));
+        assert!(out.contains("to_ascii_uppercase"));
+    }
 }

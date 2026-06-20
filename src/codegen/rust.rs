@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Write;
 
 use crate::parser::ast::{
@@ -6,15 +7,54 @@ use crate::parser::ast::{
 use crate::semantic::types::Type;
 
 pub fn generate_rust(program: &Program) -> String {
+    let types = collect_var_types(&program.statements);
     let mut out = String::from("fn main() {\n");
     for stmt in &program.statements {
-        gen_stmt(stmt, &mut out, 1);
+        gen_stmt(stmt, &mut out, 1, &types);
     }
     out.push_str("}\n");
     out
 }
 
-fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
+fn collect_var_types(stmts: &[Statement]) -> HashMap<String, Type> {
+    let mut map = HashMap::new();
+    for stmt in stmts {
+        match stmt {
+            Statement::VarDecl { name, typ, .. } => {
+                let ty = typ
+                    .as_ref()
+                    .and_then(|t| Type::from_name(&t.name))
+                    .unwrap_or(Type::I32);
+                map.insert(name.to_lowercase(), ty);
+            }
+            Statement::FunctionDecl { params, body, .. } => {
+                for p in params {
+                    if let Some(ty) = Type::from_name(&p.typ.name) {
+                        map.insert(p.name.to_lowercase(), ty);
+                    }
+                }
+                map.extend(collect_var_types(body));
+            }
+            Statement::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                map.extend(collect_var_types(then_branch));
+                if let Some(eb) = else_branch {
+                    map.extend(collect_var_types(eb));
+                }
+            }
+            Statement::While { body, .. } => map.extend(collect_var_types(body)),
+            Statement::For { body, .. } => map.extend(collect_var_types(body)),
+            Statement::DoLoop { body, .. } => map.extend(collect_var_types(body)),
+            _ => {}
+        }
+    }
+    map
+}
+
+fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize, types: &HashMap<String, Type>) {
     let pad = "    ".repeat(indent);
     match stmt {
         Statement::VarDecl {
@@ -63,13 +103,13 @@ fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
             gen_expr(condition, out);
             out.push_str(" {\n");
             for s in then_branch {
-                gen_stmt(s, out, indent + 1);
+                gen_stmt(s, out, indent + 1, types);
             }
             if let Some(else_branch) = else_branch {
                 out.push_str(&pad);
                 out.push_str("} else {\n");
                 for s in else_branch {
-                    gen_stmt(s, out, indent + 1);
+                    gen_stmt(s, out, indent + 1, types);
                 }
             }
             out.push_str(&pad);
@@ -81,7 +121,7 @@ fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
             gen_expr(condition, out);
             out.push_str(" {\n");
             for s in body {
-                gen_stmt(s, out, indent + 1);
+                gen_stmt(s, out, indent + 1, types);
             }
             out.push_str(&pad);
             out.push_str("}\n");
@@ -116,7 +156,7 @@ fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
                 gen_expr(end, out);
                 out.push_str(" {\n");
                 for s in body {
-                    gen_stmt(s, out, indent + 3);
+                    gen_stmt(s, out, indent + 3, types);
                 }
                 out.push_str(&"    ".repeat(indent + 2));
                 out.push_str("    ");
@@ -133,7 +173,7 @@ fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
                 gen_expr(end, out);
                 out.push_str(" {\n");
                 for s in body {
-                    gen_stmt(s, out, indent + 3);
+                    gen_stmt(s, out, indent + 3, types);
                 }
                 out.push_str(&"    ".repeat(indent + 2));
                 out.push_str("    ");
@@ -151,7 +191,7 @@ fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
                 gen_expr(end, out);
                 out.push_str(" {\n");
                 for s in body {
-                    gen_stmt(s, out, indent + 2);
+                    gen_stmt(s, out, indent + 2, types);
                 }
                 out.push_str(&inner);
                 out.push_str("    ");
@@ -174,7 +214,7 @@ fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
                 gen_expr(cond, out);
                 out.push_str(" {\n");
                 for s in body {
-                    gen_stmt(s, out, indent + 1);
+                    gen_stmt(s, out, indent + 1, types);
                 }
                 out.push_str(&pad);
                 out.push_str("}\n");
@@ -185,7 +225,7 @@ fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
                 gen_expr(cond, out);
                 out.push_str(") {\n");
                 for s in body {
-                    gen_stmt(s, out, indent + 1);
+                    gen_stmt(s, out, indent + 1, types);
                 }
                 out.push_str(&pad);
                 out.push_str("}\n");
@@ -194,7 +234,7 @@ fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
                 out.push_str(&pad);
                 out.push_str("loop {\n");
                 for s in body {
-                    gen_stmt(s, out, indent + 1);
+                    gen_stmt(s, out, indent + 1, types);
                 }
                 out.push_str(&"    ".repeat(indent));
                 out.push_str("    if !(");
@@ -207,7 +247,7 @@ fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
                 out.push_str(&pad);
                 out.push_str("loop {\n");
                 for s in body {
-                    gen_stmt(s, out, indent + 1);
+                    gen_stmt(s, out, indent + 1, types);
                 }
                 out.push_str(&"    ".repeat(indent));
                 out.push_str("    if ");
@@ -258,7 +298,7 @@ fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
             }
             out.push_str(" {\n");
             for s in body {
-                gen_stmt(s, out, indent + 1);
+                gen_stmt(s, out, indent + 1, types);
             }
             out.push_str(&pad);
             out.push_str("}\n");
@@ -327,6 +367,40 @@ fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
             out.push_str(";\n");
         }
         Statement::OnError { .. } => {}
+        Statement::Input { prompt, target } => {
+            out.push_str(&pad);
+            out.push_str("{\n");
+            let inner = "    ".repeat(indent + 1);
+            out.push_str(&inner);
+            out.push_str("let mut __buf__ = String::new();\n");
+            if let Some(p) = prompt {
+                out.push_str(&inner);
+                out.push_str("print!(\"");
+                out.push_str(&escape_string(p));
+                out.push_str("\");\n");
+                out.push_str(&inner);
+                out.push_str("std::io::Write::flush(&mut std::io::stdout()).unwrap();\n");
+            }
+            out.push_str(&inner);
+            out.push_str("std::io::stdin().read_line(&mut __buf__).unwrap();\n");
+            out.push_str(&inner);
+            out.push_str(target);
+            out.push_str(" = ");
+            match types.get(&target.to_lowercase()) {
+                Some(Type::String) => out.push_str("__buf__.trim().to_string()"),
+                Some(Type::Bool) => {
+                    out.push_str("matches!(__buf__.trim().to_ascii_uppercase().as_str(), \"TRUE\")")
+                }
+                Some(Type::I32) => out.push_str("__buf__.trim().parse::<i32>().unwrap()"),
+                Some(Type::I64) => out.push_str("__buf__.trim().parse::<i64>().unwrap()"),
+                Some(Type::F64) => out.push_str("__buf__.trim().parse::<f64>().unwrap()"),
+                Some(Type::U8) => out.push_str("__buf__.trim().parse::<u8>().unwrap()"),
+                _ => out.push_str("__buf__.trim().parse().unwrap()"),
+            }
+            out.push_str(";\n");
+            out.push_str(&pad);
+            out.push_str("}\n");
+        }
         Statement::Resume { .. } => {}
     }
 }

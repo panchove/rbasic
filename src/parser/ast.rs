@@ -67,6 +67,10 @@ pub enum Statement {
     OnError {
         label: String,
     },
+    Input {
+        prompt: Option<String>,
+        target: String,
+    },
     Resume {
         label: Option<String>,
     },

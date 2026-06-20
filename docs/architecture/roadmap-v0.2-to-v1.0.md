@@ -34,6 +34,9 @@ This document defines the projected development roadmap from the current v0.2 (S
 
 ## v0.3 — Type Checking Completion
 
+**Note:** SemanticInfo and IR work are intentionally deferred beyond v0.3. The observations ARCH-002 and ARCH-003 document these future directions.
+
+
 **Target:** Next milestone
 
 ### Planned Features

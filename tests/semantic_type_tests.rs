@@ -961,4 +961,36 @@ mod tests {
     fn compound_assign_float_intdiv_fails() {
         assert!(has_error("LET MUT x: F64 = 8.0\nx \\= 2", "E1045"));
     }
+
+    // ---- RFC-0019: INPUT semantic rules ----
+
+    #[test]
+    fn input_valid_string() {
+        assert!(analyze_src("LET MUT s: STRING = \"\"\nINPUT s").is_ok());
+    }
+
+    #[test]
+    fn input_valid_integer() {
+        assert!(analyze_src("LET MUT n: I32 = 0\nINPUT n").is_ok());
+    }
+
+    #[test]
+    fn input_valid_with_prompt() {
+        assert!(analyze_src("LET MUT n: I32 = 0\nINPUT \"Enter n: \", n").is_ok());
+    }
+
+    #[test]
+    fn input_undeclared_target_fails() {
+        assert!(has_error("INPUT x", "E1050"));
+    }
+
+    #[test]
+    fn input_immutable_target_fails() {
+        assert!(has_error("LET x: I32 = 0\nINPUT x", "E1051"));
+    }
+
+    #[test]
+    fn input_unsupported_type_fails() {
+        assert!(has_error("LET MUT x: I16 = 0\nINPUT x", "E1052"));
+    }
 }

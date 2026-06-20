@@ -31,6 +31,7 @@ impl Span {
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenKind {
     // Keywords (case‑insensitive)
+    Input,
     Let,
     Mut,
     Function,
@@ -145,6 +146,7 @@ impl fmt::Display for TokenKind {
             Or => "OR",
             Xor => "XOR",
             Dim => "DIM",
+            Input => "INPUT",
             On => "ON",
             Error => "ERROR",
             Goto => "GOTO",

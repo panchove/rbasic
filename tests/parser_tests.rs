@@ -637,4 +637,36 @@ END FOR
             }
         }
     }
+
+    // ---- RFC-0019: INPUT ----
+
+    #[test]
+    fn test_input_no_prompt() {
+        let src = "LET MUT name: STRING = \"\"\nINPUT name";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[1] {
+            Statement::Input { prompt, target } => {
+                assert!(prompt.is_none());
+                assert_eq!(target, "name");
+            }
+            _ => panic!("expected Input"),
+        }
+    }
+
+    #[test]
+    fn test_input_with_prompt() {
+        let src = "LET MUT age: I32 = 0\nINPUT \"Enter age: \", age";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[1] {
+            Statement::Input { prompt, target } => {
+                assert_eq!(prompt.as_deref(), Some("Enter age: "));
+                assert_eq!(target, "age");
+            }
+            _ => panic!("expected Input"),
+        }
+    }
 }
