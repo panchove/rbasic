@@ -4,7 +4,7 @@ Status: Accepted
 Version: 0.1
 Author: RBASIC Project
 Created: 2026-06-19
-Last Updated: 2026-06-19
+Last Updated: 2026-06-20
 
 ---
 
@@ -94,7 +94,10 @@ Local variables shadow globals within the function/block scope.
 | E1031 | Return type mismatch (RFC-0008)                    | 3     |
 | E1032 | Invalid condition type (RFC-0008)                  | 3     |
 | E1033 | Return outside function body (RFC-0008)            | 3     |
-| E1034 | Reserved                                           | —     |
+| E1034 | Non-numeric step value (FOR...STEP)                | 3     |
+| E1040 | Assignment to undeclared variable (RFC-0015)       | 3     |
+| E1041 | Type mismatch in assignment (RFC-0015)             | 3     |
+| E1042 | Assignment to immutable variable (RFC-0015)        | 3     |
 
 ---
 
@@ -150,15 +153,15 @@ Function return type annotations are validated the same way.
 - Case-insensitive lookup
 - Nested scope with local shadowing
 - Control flow scope isolation (IF/WHILE bodies use cloned scopes)
+- Assignment validation (E1040, E1041, E1042)
 
-### Not Yet Implemented (Phases 2-3)
+### Implementation Status (v0.2)
 
-- Type inference for expressions
-- Operator type compatibility (RFC-0007)
-- Argument count validation (RFC-0008)
-- Return type checking (RFC-0008)
-- Boolean condition validation (RFC-0008)
-- Top-level return rejection (RFC-0008)
+All phases are fully implemented:
+
+- **Phase 1** (this RFC): Global/local variable resolution, duplicate detection, case‑insensitive lookup, nested scopes, unknown type validation, assignment validation
+- **Phase 2** (RFC-0007): Type annotation validation, primitive type matching, implicit integer widening, float promotion, integer‑to‑float widening, classic BASIC aliases
+- **Phase 3** (RFC-0008): Operator type checking, argument count/type validation, return type checking, boolean condition validation, top‑level return rejection, FOR...STEP numeric validation
 
 ---
 
@@ -178,4 +181,5 @@ Function return type annotations are validated the same way.
 ✓ Nested scope resolution
 ✓ Parameter resolution inside function bodies
 ✓ Phase 1 unit tests passing
+✓ All phases 1‑3 unit tests passing (229 total)
 ```

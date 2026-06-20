@@ -3,8 +3,8 @@
 Status: Accepted
 Version: 0.1
 Author: RBASIC Project
-Created: 2026-07-01
-Last Updated: 2026-06-19
+Created: 2026-06-19
+Last Updated: 2026-06-20
 
 ---
 
@@ -22,6 +22,7 @@ This RFC defines:
 * Return type validation for function bodies
 * Boolean condition validation for IF/WHILE statements
 * Top-level return statement rejection
+* FOR…STEP value type validation (code E1034, implementation in RFC-0009)
 * Final semantic analyzer acceptance criteria
 
 ---
@@ -93,6 +94,7 @@ The semantic analyzer must:
 | E1031 | Return type mismatch |
 | E1032 | Invalid condition type (expected BOOL) |
 | E1033 | Return outside function body |
+| E1034 | Non-numeric step value in FOR…STEP (origin: RFC-0009) |
 
 ---
 
@@ -103,6 +105,6 @@ The semantic analyzer must:
 ✓ Return type validation implemented
 ✓ Boolean condition validation implemented
 ✓ Top-level return rejection implemented
-✓ All error codes E1030-E1033 implemented
+✓ All error codes E1030-E1034 implemented
 ✓ Semantic compatibility tests passing
 ```

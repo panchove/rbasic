@@ -4,7 +4,7 @@ Status: Accepted
 Version: 0.1
 Author: RBASIC Project
 Created: 2026-06-18
-Last Updated: 2026-06-18
+Last Updated: 2026-06-20
 
 ## 1. Purpose
 
@@ -27,24 +27,53 @@ Does **not** define:
 
 ## 3. Supported Primitive Types
 
-- BOOL
-- I32
-- F64
-- STRING
+| Type     | Category   | Rust equivalent | Description               |
+|----------|------------|-----------------|---------------------------|
+| BOOL     | Boolean    | `bool`          | True/false                |
+| I8       | Signed int | `i8`            | 8-bit signed integer      |
+| I16      | Signed int | `i16`           | 16-bit signed integer     |
+| I32      | Signed int | `i32`           | 32-bit signed integer     |
+| I64      | Signed int | `i64`           | 64-bit signed integer     |
+| U8       | Unsigned   | `u8`            | 8-bit unsigned integer    |
+| U16      | Unsigned   | `u16`           | 16-bit unsigned integer   |
+| U32      | Unsigned   | `u32`           | 32-bit unsigned integer   |
+| U64      | Unsigned   | `u64`           | 64-bit unsigned integer   |
+| F32      | Float      | `f32`           | 32-bit single precision   |
+| F64      | Float      | `f64`           | 64-bit double precision   |
+| STRING   | String     | `String`        | UTF-8 string              |
 
-All type names are case‑insensitive.
+All type names are case‑insensitive. Classic BASIC aliases (RFC-0011) map to these canonical types: `INTEGER`→I32, `LONG`/`LONGLONG`→I64, `SINGLE`→F32, `DOUBLE`→F64, `BOOLEAN`→BOOL, `BYTE`→U8, `WORD`→U16.
 
-## 4. Compatibility Matrix
+## 4. Compatibility Rules
+
+RBASIC v0.1 uses **strict compatibility** within each type family, with implicit widening for same-family integer types and float mutual promotion.
+
+### 4.1 Same‑family compatibility
+
+Types within the same category are compatible:
+
+```text
+Signed integers:   I8 ↔ I16 ↔ I32 ↔ I64   (widening allowed)
+Unsigned integers: U8 ↔ U16 ↔ U32 ↔ U64   (widening allowed)
+Floats:            F32 ↔ F64               (mutual promotion)
+Boolean:           BOOL → BOOL only
+String:            STRING → STRING only
+```
+
+Signed ↔ unsigned mixing is **always rejected** (produces E1020/E1021).
+
+### 4.2 Cross‑family compatibility
 
 ```
-              BOOL   I32   F64   STRING
-BOOL          ✓     ✗     ✗      ✗
-I32           ✗     ✓     ✗      ✗
-F64           ✗     ✗     ✓      ✗
-STRING        ✗     ✗     ✗      ✓
+              BOOL   I8/I16/I32/I64   U8/U16/U32/U64   F32/F64   STRING
+BOOL          ✓      ✗                ✗                ✗         ✗
+Signed int    ✗      ✓ (same-family)  ✗                ✓ (→F32/F64) ✗
+Unsigned int  ✗      ✗                ✓ (same-family)  ✓ (→F32/F64) ✗
+Float         ✗      ✗                ✗                ✓         ✗
+STRING        ✗      ✗                ✗                ✗         ✓
 ```
 
-RBASIC v0.1 uses **strict compatibility** with one exception: integer literals and same-family integer types support implicit widening (see §4a).
+Integer‑to‑float widening (i.e., any integer to F32 or F64) is allowed implicitly — see §4.3.
 
 ## 5. Variable Initialization Rules
 
@@ -85,32 +114,62 @@ PrintAge("forty-two")
 
 ## 8. Unary Operators
 
-Allowed:
-- `NOT BOOL → BOOL`
-
-Any other combination produces `E1022 Invalid Unary Operation`.
+| Operator | Operand type | Result | Description           |
+|----------|-------------|--------|-----------------------|
+| `-`      | Signed int  | Same   | Numeric negation      |
+| `-`      | Float       | Same   | Numeric negation      |
+| `-`      | Unsigned    | ✗ E1022| Unsigned negation     |
+| `NOT`    | BOOL        | BOOL   | Logical NOT           |
+| `NOT`    | Non‑BOOL    | ✗ E1022| Invalid operand       |
 
 ## 9. Binary Operators
 
-### Arithmetic
-- `I32 + I32 → I32`
-- `I32 - I32 → I32`
-- `I32 * I32 → I32`
-- `I32 / I32 → I32`
-- `F64 + F64 → F64`
-- `F64 - F64 → F64`
-- `F64 * F64 → F64`
-- `F64 / F64 → F64`
+### Arithmetic (`+`, `-`, `*`, `/`, `^`, `\`, `MOD`)
 
-### Equality
-- `BOOL == BOOL → BOOL`
-- `I32 == I32 → BOOL`
-- `F64 == F64 → BOOL`
-- `STRING == STRING → BOOL`
+Valid for same-family numeric types:
+```
+Signed int op Signed int → wider of the two types
+Unsigned int op Unsigned int → wider of the two types
+Float op Float → wider of the two (F32↔F64 → F64)
+Signed int op Unsigned int → ✗ E1021
+```
 
-### Relational (ordering)
-- `I32 < I32, <=, >, >= → BOOL`
-- `F64 < F64, <=, >, >= → BOOL`
+Special notes:
+- `^` (power) always returns `F64`
+- `\` (integer division) and `MOD` require integer types (not F32/F64)
+- `+` on STRING concatenates: `STRING + STRING → STRING`
+
+### Bitwise shift (`SHL`, `SHR`)
+```
+Integer op Integer → left operand's type
+```
+Both operands must be integers (signed or unsigned, same family not required).
+
+### Equality (`==`, `!=`)
+Same‑type comparison always valid, result is `BOOL`:
+```
+BOOL == BOOL → BOOL
+Signed int == Signed int → BOOL
+Unsigned int == Unsigned int → BOOL
+Float == Float → BOOL
+STRING == STRING → BOOL
+```
+
+### Relational (`<`, `<=`, `>`, `>=`)
+Valid for numeric types and STRING, result is `BOOL`:
+```
+Signed int < Signed int → BOOL
+Unsigned int < Unsigned int → BOOL
+Float < Float → BOOL
+STRING < STRING → BOOL
+```
+
+### Logical (`AND`, `OR`, `XOR`)
+```
+BOOL AND BOOL → BOOL
+BOOL OR BOOL → BOOL
+BOOL XOR BOOL → BOOL
+```
 
 All other binary combinations produce `E1021 Invalid Binary Operation`.
 
@@ -140,12 +199,31 @@ An integer literal (`Literal::Int`) resolves as `I32` by default and is implicit
 
 F32 and F64 are mutually compatible (F32 widens to F64).
 
+### 4.3 Integer‑to‑Float Widening
+
+Any integer type (signed or unsigned) is implicitly compatible with F32 and F64:
+
+```text
+Signed integer (I8/I16/I32/I64) → F32
+Signed integer (I8/I16/I32/I64) → F64
+Unsigned integer (U8/U16/U32/U64) → F32
+Unsigned integer (U8/U16/U32/U64) → F64
+```
+
+This enables patterns such as:
+
+```basic
+LET x: F64 = 42       ' I32 literal widens to F64
+LET y: F64 = x / 3    ' integer division result promotes to F64
+```
+
+This widening is consistent with classic BASIC semantics where numeric types promote uniformly to floating point.
+
 Explicit cross-type casts use the `AS` keyword and are governed by `can_cast_explicitly()` in the semantic analyzer.
 
 ## 11. Future Compatibility
 
 Possible future additions:
-- I32 → F64 promotion
 - User‑defined conversions
 
 ## 12. Acceptance Criteria

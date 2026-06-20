@@ -4,7 +4,7 @@ Status: Accepted
 Version: 0.1
 Author: RBASIC Project
 Created: 2026-06-17
-Last Updated: 2026-06-19
+Last Updated: 2026-06-20
 
 ---
 
@@ -166,13 +166,21 @@ A-Z
 a-z
 0-9
 _
+$
 ```
 
 Rules:
 
 * Must start with a letter or underscore.
 * Cannot start with a digit.
+* `$` may only appear as an optional trailing suffix — it is not allowed in the middle of an identifier, and multiple `$` suffixes are invalid.
 * Cannot match reserved keywords.
+
+Grammar:
+
+```ebnf
+identifier ::= [A-Za-z_][A-Za-z0-9_]*[$]?
+```
 
 Valid:
 
@@ -181,6 +189,10 @@ counter
 _total
 user_name
 value123
+name$
+customer$
+STR$
+LEFT$
 ```
 
 Invalid:
@@ -189,6 +201,9 @@ Invalid:
 123value
 LET
 FUNCTION
+na$me
+foo$$
+abc$def
 ```
 
 **Reserved primitive type identifiers** (treated as identifiers but reserved for future use):
@@ -387,6 +402,36 @@ lEt
 
 The lexer SHALL normalize keyword tokens.
 
+**Bool literal recognition**: The lexer SHALL recognize `TRUE` and `FALSE` (case‑insensitive) as `BoolLiteral` tokens rather than `Identifier`.
+
+**Additional keywords** (added during v0.1 evolution):
+
+```text
+STEP    — optional FOR loop increment
+DO      — DO loop start
+LOOP    — DO loop end
+UNTIL   — DO UNTIL condition
+AS      — explicit type cast
+AND     — logical AND
+OR      — logical OR
+XOR     — logical XOR
+DIM     — array declaration
+ON      — ON ERROR GOTO
+ERROR   — ON ERROR GOTO
+GOTO    — ON ERROR GOTO
+RESUME  — error recovery
+SHL     — shift left
+SHR     — shift right
+```
+
+**Extended operators** (beyond the core `+`, `-`, `*`, `/`):
+
+```text
+^       — power (Caret)
+\       — integer division (Backslash)
+MOD     — modulo (Mod)
+```
+
 ---
 
 # 16. Tokenization Rules
@@ -465,13 +510,14 @@ message
 
 # 18. Token Inventory
 
-Minimum token set for RBASIC v0.1:
+Complete token set for RBASIC v0.1:
 
 ```text
 Identifier
 IntegerLiteral
 FloatLiteral
 StringLiteral
+BoolLiteral
 
 Let
 Mut
@@ -487,11 +533,30 @@ Print
 Not
 For
 To
+Step
+Do
+Loop
+Until
+As
+And
+Or
+Xor
+Dim
+On
+Error
+Goto
+Resume
 
 Plus
 Minus
 Star
 Slash
+Caret
+Backslash
+Mod
+
+Shl
+Shr
 
 Assign
 
@@ -510,10 +575,29 @@ RightParen
 Colon
 Comma
 
-EOF
+Eof
 ```
 
-The lexer shall always emit exactly one `EOF` token at the end of every source file.
+High‑level token categories for readability:
+
+| Category        | Tokens |
+|----------------|--------|
+| Literals       | `Identifier`, `IntegerLiteral`, `FloatLiteral`, `StringLiteral`, `BoolLiteral` |
+| Declarations   | `Let`, `Mut`, `Dim`, `Function` |
+| Control flow   | `If`, `Then`, `Else`, `End`, `While`, `For`, `To`, `Step`, `Do`, `Loop`, `Until` |
+| I/O            | `Print` |
+| Returns        | `Return`, `Returns` |
+| Operators      | `Plus`, `Minus`, `Star`, `Slash`, `Caret`, `Backslash`, `Mod` |
+| Bitwise        | `Shl`, `Shr` |
+| Logical        | `Not`, `And`, `Or`, `Xor` |
+| Type ops       | `As` |
+| Assignment     | `Assign` |
+| Comparison     | `EqualEqual`, `NotEqual`, `Less`, `LessEqual`, `Greater`, `GreaterEqual` |
+| Delimiters     | `LeftParen`, `RightParen`, `Colon`, `Comma` |
+| Error handling | `On`, `Error`, `Goto`, `Resume` |
+| Sentinel       | `Eof` |
+
+The lexer shall always emit exactly one `Eof` token at the end of every source file.
 
 ---
 

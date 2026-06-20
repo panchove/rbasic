@@ -4,7 +4,7 @@ Status: Accepted
 Version: 0.1
 Author: RBASIC Project
 Created: 2026-06-17
-Last Updated: 2026-06-17
+Last Updated: 2026-06-20
 
 ---
 
@@ -38,6 +38,12 @@ statement ::= variable_decl
             | return_stmt
             | if_stmt
             | while_stmt
+            | for_stmt
+            | do_stmt
+            | dim_stmt
+            | on_error_stmt
+            | resume_stmt
+            | assign_stmt
             | expression_stmt
 ```
 
@@ -86,6 +92,7 @@ Block termination depends on the enclosing construct:
 - FUNCTION → END FUNCTION
 - IF       → END IF (ELSE optional)
 - WHILE    → END WHILE
+- FOR      → END FOR
 
 ---
 
@@ -119,7 +126,55 @@ while_stmt ::= "WHILE" expression block "END" "WHILE"
 ```
 ---
 
-# 12. Expression Statements
+# 12. For Statements
+
+```ebnf
+for_stmt ::= "FOR" IDENTIFIER "=" expression "TO" expression ("STEP" expression)? block "END" "FOR"
+```
+
+The `STEP` clause is optional. If omitted, the default increment is 1. The loop variable is implicitly declared as `MUT` within the loop scope.
+
+---
+
+# 13. Do Loop Statements
+
+```ebnf
+do_while_pre  ::= "DO" "WHILE" expression block "LOOP"
+do_until_pre  ::= "DO" "UNTIL" expression block "LOOP"
+do_while_post ::= "DO" block "LOOP" "WHILE" expression
+do_until_post ::= "DO" block "LOOP" "UNTIL" expression
+```
+
+Four variants matching classic BASIC:
+- **DO WHILE ... LOOP**: pre-test, executes while condition is TRUE
+- **DO UNTIL ... LOOP**: pre-test, executes while condition is FALSE (inverse)
+- **DO ... LOOP WHILE**: post-test, executes at least once while condition is TRUE
+- **DO ... LOOP UNTIL**: post-test, executes at least once until condition is TRUE
+
+---
+
+# 14. Dim Statements
+
+```ebnf
+dim_stmt ::= "DIM" IDENTIFIER "(" expression ("," expression)* ")" ("," IDENTIFIER "(" expression ("," expression)* ")")*
+```
+
+Array declarations. The expressions inside parentheses are dimension sizes. Multiple arrays may be declared in a single DIM statement separated by commas.
+
+---
+
+# 15. On Error / Resume Statements
+
+```ebnf
+on_error_stmt ::= "ON" "ERROR" "GOTO" IDENTIFIER
+resume_stmt   ::= "RESUME" IDENTIFIER?
+```
+
+`ON ERROR GOTO label` sets the error handler to a label. `RESUME` (with or without a target label) transfers control after an error is handled.
+
+---
+
+# 16. Expression Statements
 
 ```ebnf
 expression_stmt ::= expression
@@ -127,56 +182,89 @@ expression_stmt ::= expression
 Used for function calls.
 ---
 
-# 13. Expressions
+# 17. Assignment Statements
 
 ```ebnf
-expression ::= equality
-
-equality   ::= comparison (("==" | "!=") comparison)*
-comparison ::= term (("<" | "<=" | ">" | ">=") term)*
-term       ::= factor (("+" | "-") factor)*
-factor     ::= unary (("*" | "/") unary)*
-unary      ::= "-" unary | primary
-primary    ::= INTEGER_LITERAL | FLOAT_LITERAL | STRING_LITERAL | IDENTIFIER | function_call | "(" expression ")"
-function_call ::= IDENTIFIER "(" arguments? ")"
-arguments  ::= expression ("," expression)*
+assign_stmt ::= IDENTIFIER "=" expression
 ```
+
+Standalone assignment mutates an existing variable. The variable must have been declared with `LET MUT` (or be an implicitly mutable FOR loop variable). The type of the expression must be compatible with the variable's declared type.
+
+Examples:
+
+```basic
+x = 42
+counter = counter + 1
+name = "hello"
+flag = TRUE
+```
+
 ---
 
-# 14. Operator Precedence (high → low)
-1. Function call / grouping
-2. Unary minus
-3. `*` `/`
-4. `+` `-`
-5. Comparison `<` `<=` `>` `>=`
-6. Equality `==` `!=`
-All binary operators are left‑associative; unary minus is right‑associative.
+# 18. Expressions
+
+```ebnf
+expression ::= logical_or ("AS" type_ref)?
+
+logical_or  ::= logical_and (("OR" | "XOR") logical_and)*
+logical_and ::= equality ("AND" equality)*
+equality    ::= comparison (("==" | "!=") comparison)*
+comparison  ::= term (("<" | "<=" | ">" | ">=") term)*
+term        ::= factor (("+" | "-") factor)*
+factor      ::= power (("*" | "/" | "\\" | "MOD" | "SHL" | "SHR") power)*
+power       ::= unary ("^" power)*     ' right‑associative
+unary       ::= "-" unary | "NOT" unary | primary
+primary     ::= INTEGER_LITERAL | FLOAT_LITERAL | STRING_LITERAL | BOOL_LITERAL
+              | IDENTIFIER | function_call | "(" expression ")"
+function_call ::= IDENTIFIER "(" arguments? ")"
+arguments   ::= expression ("," expression)*
+```
+
+Notes:
+- `AS type_ref` at the expression level allows postfix casts: `expr AS I32`
+- `\` is integer division (Backslash), `MOD` is modulo, `^` is power
+- `SHL`/`SHR` are bitwise shift operators
+- `NOT` is a unary prefix operator for logical negation
 ---
 
-# 15. Type References
+# 19. Operator Precedence (high → low)
+1. Function call / grouping, Bool literal
+2. Unary `-` `NOT`
+3. `^` (right-associative)
+4. `*` `/` `\` `MOD` `SHL` `SHR`
+5. `+` `-`
+6. Comparison `<` `<=` `>` `>=`
+7. Equality `==` `!=`
+8. `AND`
+9. `OR` `XOR`
+10. `AS` (postfix cast)
+All binary operators are left‑associative except `^` which is right‑associative.
+---
+
+# 20. Type References
 
 ```ebnf
 type_ref ::= IDENTIFIER
 ```
-Valid primitive type identifiers (checked later in semantic analysis): `bool`, `i32`, `f64`, `string`.
+Valid primitive type identifiers (checked later in semantic analysis): `BOOL`, `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, `U64`, `F32`, `F64`, `STRING`, plus classic BASIC aliases (`INTEGER`, `LONG`, `DOUBLE`, `SINGLE`, `BOOLEAN`, `BYTE`, `WORD`, `LONGLONG`). All are case‑insensitive.
 ---
 
-# 16. Assignment
+# 22. Assignment
 
-Assignment is only allowed in variable declarations (`LET … = …`). Plain assignment (`x = 10`) is **not** in the v0.1 grammar.
+Standalone assignment (`x = 10`) is supported as a statement (see §16). Assignment is also part of variable declarations (`LET … = …`, see §5) and FOR loop initialization (`FOR var = …`, see §12).
 ---
 
-# 17. Error Handling
+# 23. Error Handling
 
 Parser must emit structured `ParseError` with file, line, column, span, message, expected token/construct, and actual token.
 ---
 
-# 18. Parser Recovery
+# 24. Parser Recovery
 
 Minimal recovery: stop at first syntax error.
 ---
 
-# 19. Examples
+# 25. Examples
 
 ## Full Program
 ```
@@ -199,7 +287,7 @@ PRINT "Hello, RBASIC"
 ```
 ---
 
-# 20. Acceptance Criteria
+# 26. Acceptance Criteria
 
 Parser must:
 - Accept all forms defined above.

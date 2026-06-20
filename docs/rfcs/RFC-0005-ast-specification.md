@@ -4,7 +4,7 @@ Status: Accepted
 Version: 0.1
 Author: RBASIC Project
 Created: 2026-06-19
-Last Updated: 2026-06-19
+Last Updated: 2026-06-20
 
 ---
 
@@ -40,6 +40,12 @@ Statement ::= VarDecl
             | Return
             | If
             | While
+            | For
+            | DoLoop
+            | Dim
+            | OnError
+            | Resume
+            | Assign
             | ExpressionStmt
             | FunctionDecl
 ```
@@ -99,7 +105,97 @@ While {
 
 While loop (`WHILE condition block END WHILE`).
 
-### 4.6 ExpressionStmt
+### 4.6 For
+
+```text
+For {
+    var:   String,
+    start: Expression,
+    end:   Expression,
+    step:  Option<Expression>,
+    body:  Vec<Statement>,
+}
+```
+
+For loop (`FOR var = start TO end [STEP step] block END FOR`). The loop variable is implicitly MUT within the loop body.
+
+### 4.7 DoLoop
+
+```text
+DoLoop {
+    variant:   DoLoopVariant,
+    condition: Option<Expression>,
+    body:      Vec<Statement>,
+}
+```
+
+```text
+DoLoopVariant ::= WhilePre | UntilPre | WhilePost | UntilPost
+```
+
+Four loop variants:
+- **WhilePre**: `DO WHILE cond ... LOOP`
+- **UntilPre**: `DO UNTIL cond ... LOOP`
+- **WhilePost**: `DO ... LOOP WHILE cond`
+- **UntilPost**: `DO ... LOOP UNTIL cond`
+
+### 4.8 Dim
+
+```text
+Dim {
+    declarations: Vec<ArrayDecl>,
+}
+```
+
+```text
+ArrayDecl {
+    name:       String,
+    array_type: ArrayType,
+    init:       Option<Expression>,   // reserved for future use
+}
+```
+
+```text
+ArrayType {
+    base_type:  Box<TypeRef>,
+    dimensions: Vec<Expression>,       // array sizes
+}
+```
+
+Array declaration (`DIM name(dim1, dim2, ...)`). Base type defaults to `INTEGER` (I32). Code generation is deferred to a future version.
+
+### 4.9 OnError
+
+```text
+OnError {
+    label: String,
+}
+```
+
+Error handler directive (`ON ERROR GOTO label`).
+
+### 4.10 Resume
+
+```text
+Resume {
+    label: Option<String>,
+}
+```
+
+Error recovery (`RESUME` or `RESUME label`).
+
+### 4.11 Assign
+
+```text
+Assign {
+    name: String,
+    expr: Expression,
+}
+```
+
+Standalone assignment (`x = expression`). The variable must be declared and mutable.
+
+### 4.12 ExpressionStmt
 
 ```text
 ExpressionStmt {
@@ -109,7 +205,7 @@ ExpressionStmt {
 
 An expression used as a statement (typically function calls).
 
-### 4.7 FunctionDecl
+### 4.13 FunctionDecl
 
 ```text
 FunctionDecl {
@@ -139,6 +235,7 @@ Expression ::= Literal
              | Unary { op: UnaryOp, expr: Box<Expression> }
              | Binary { left: Box<Expression>, op: BinaryOp, right: Box<Expression> }
              | Grouping(Box<Expression>)
+             | Cast { expr: Box<Expression>, target_type: String }
              | Call { callee: String, args: Vec<Expression> }
 ```
 
@@ -158,28 +255,48 @@ A simple name reference, resolved later during semantic analysis.
 ### 5.3 Unary
 
 ```text
-UnaryOp ::= Neg
+UnaryOp ::= Neg | Not
 ```
 
-Unary minus (`-expression`). Future RFCs may extend this with `NOT`.
+| Variant | Syntax | Semantics |
+|---------|--------|-----------|
+| `Neg`   | `-expr` | Numeric negation (signed integers and floats) |
+| `Not`   | `NOT expr` | Logical NOT (BOOL only) |
 
 ### 5.4 Binary
 
 ```text
-BinaryOp ::= Add | Sub | Mul | Div
+BinaryOp ::= Add | Sub | Mul | Div | Pow | IntDiv | Mod
            | Eq | NotEq
            | Lt | Lte | Gt | Gte
+           | And | Or | Xor
+           | Shl | Shr
 ```
 
-Arithmetic: `+`, `-`, `*`, `/`
-Equality: `==`, `!=`
-Relational: `<`, `<=`, `>`, `>=`
+| Category         | Operators                                          |
+|------------------|----------------------------------------------------|
+| Arithmetic       | `+`, `-`, `*`, `/`, `^` (Pow), `\` (IntDiv), `MOD` |
+| Equality         | `==`, `!=`                                         |
+| Relational       | `<`, `<=`, `>`, `>=`                               |
+| Logical          | `AND`, `OR`, `XOR`                                 |
+| Bitwise shift    | `SHL`, `SHR`                                       |
 
 ### 5.5 Grouping
 
 Parenthesized expression (`(expression)`). Used to override operator precedence.
 
-### 5.6 Call
+### 5.6 Cast
+
+```text
+Cast {
+    expr:        Box<Expression>,
+    target_type: String,
+}
+```
+
+Postfix explicit type cast (`expr AS TypeName`). Valid for all numeric types (signed integers, unsigned integers, floats).
+
+### 5.7 Call
 
 ```text
 Call {
@@ -200,7 +317,7 @@ TypeRef {
 }
 ```
 
-A type annotation is represented as a string identifier. Valid primitive types (`BOOL`, `I32`, `F64`, `STRING`) are validated during semantic analysis, not during parsing.
+A type annotation is represented as a string identifier. Valid primitive types are validated during semantic analysis, not during parsing. The full v0.1 type set: `BOOL`, `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, `U64`, `F32`, `F64`, `STRING`, plus classic BASIC aliases (`INTEGER`, `LONG`, `DOUBLE`, `SINGLE`, `BOOLEAN`, `BYTE`, `WORD`, `LONGLONG`). All type names are case‑insensitive.
 
 ---
 
@@ -212,12 +329,15 @@ Semantic analysis and code generation traverse the AST as follows:
 2. **FunctionDecl**: collect name/params/ret_type, then recurse into body
 3. **If**: visit condition, then recurse into then_branch and else_branch
 4. **While**: visit condition, then recurse into body
-5. **VarDecl**: visit init expression
-6. **Print/Return/ExpressionStmt**: visit inner expression(s)
-7. **Binary**: left then right
-8. **Unary**: inner expression
-9. **Call**: visit all arguments
-10. **Literal/Identifier**: leaf nodes
+5. **For**: visit start, end, step (if present), then recurse into body
+6. **DoLoop**: visit condition (if present), then recurse into body
+7. **VarDecl**: visit init expression
+8. **Print/Return/ExpressionStmt/Dim/OnError/Resume**: visit inner expression(s)
+9. **Cast**: visit inner expression
+10. **Binary**: left then right
+11. **Unary**: inner expression
+12. **Call**: visit all arguments
+13. **Literal/Identifier**: leaf nodes
 
 ---
 
@@ -225,11 +345,14 @@ Semantic analysis and code generation traverse the AST as follows:
 
 ```text
 ✓ Program node with statement list
-✓ All 7 statement variants defined
-✓ All 6 expression variants defined
-✓ All 4 literal types defined
-✓ Unary and binary operators defined
+✓ All 13 statement variants defined (VarDecl, Print, Return, If, While, For, DoLoop, Dim, OnError, Resume, Assign, ExpressionStmt, FunctionDecl)
+✓ All 7 expression variants defined (Literal, Identifier, Unary, Binary, Grouping, Cast, Call)
+✓ All 4 literal types defined (Int, Float, String, Bool)
+✓ Unary operators: Neg, Not
+✓ Binary operators: Add, Sub, Mul, Div, Pow, IntDiv, Mod, Eq, NotEq, Lt, Lte, Gt, Gte, And, Or, Xor, Shl, Shr
 ✓ TypeRef defined
+✓ DoLoopVariant defined (WhilePre, UntilPre, WhilePost, UntilPost)
+✓ ArrayDecl / ArrayType defined
 ✓ Traversal order specified
 ✓ Matches parser implementation in src/parser/ast.rs
 ```

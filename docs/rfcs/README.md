@@ -30,5 +30,29 @@ Status: Accepted
 ## RFC-0010 DO Loop Specification
 Status: Accepted
 
+## RFC-0011 Type Aliases
+Status: Accepted
+
+## RFC-0012 DIM Arrays
+Status: Accepted
+
+## RFC-0013 ON ERROR / RESUME
+Status: Accepted
+
+## RFC-0014 Hybrid Stack + ARC Memory Management
+Status: Accepted
+
+## RFC-0015 Standalone Assignment
+Status: Accepted
+
+## RFC-0016 DIM Array Code Generation
+Status: Accepted
+
+## RFC-0017 String Functions
+Status: Accepted
+
+## RFC-0018 Compound Assignment
+Status: Draft
+
 ## RFC-1000 RBA Vision
 Status: Draft

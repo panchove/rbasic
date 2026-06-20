@@ -27,6 +27,8 @@ BASIC programmers are familiar with names like `INTEGER`, `LONG`, `DOUBLE`, and 
 | `BOOLEAN`  | `BOOL`        | 1 bit   | VBA / QuickBASIC name        |
 | `BYTE`     | `U8`          | 8-bit   | Unsigned byte                |
 | `WORD`     | `U16`         | 16-bit  | Unsigned 16-bit integer      |
+| `DWORD`    | `U32`         | 32-bit  | Double word (Windows API)    |
+| `QWORD`    | `U64`         | 64-bit  | Quad word (Windows API)      |
 | `INTEGER`  | `I32`         | 32-bit  | Classic BASIC INTEGER        |
 | `LONG`     | `I64`         | 64-bit  | Classic BASIC LONG           |
 | `LONGLONG` | `I64`         | 64-bit  | VBA 7.0 / 64-bit alias       |
