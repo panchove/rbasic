@@ -181,4 +181,426 @@ END FOR
             _ => panic!("expected If"),
         }
     }
+
+    // ---- DIM ----
+
+    #[test]
+    fn test_dim_single() {
+        let src = "DIM arr(10)";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        assert_eq!(prog.statements.len(), 1);
+        match &prog.statements[0] {
+            Statement::Dim { declarations } => {
+                assert_eq!(declarations.len(), 1);
+                assert_eq!(declarations[0].name, "arr");
+            }
+            _ => panic!("expected Dim"),
+        }
+    }
+
+    #[test]
+    fn test_dim_multiple() {
+        let src = "DIM a(10), b(20)";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::Dim { declarations } => {
+                assert_eq!(declarations.len(), 2);
+                assert_eq!(declarations[0].name, "a");
+                assert_eq!(declarations[1].name, "b");
+            }
+            _ => panic!("expected Dim"),
+        }
+    }
+
+    #[test]
+    fn test_dim_multi_dimension() {
+        let src = "DIM matrix(5, 5)";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::Dim { declarations } => {
+                assert_eq!(declarations[0].array_type.dimensions.len(), 2);
+            }
+            _ => panic!("expected Dim"),
+        }
+    }
+
+    #[test]
+    fn test_dim_with_as_type() {
+        let src = "DIM arr(10) AS F64";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::Dim { declarations } => {
+                assert_eq!(declarations.len(), 1);
+                assert_eq!(declarations[0].name, "arr");
+                assert_eq!(declarations[0].array_type.base_type.name, "F64");
+            }
+            _ => panic!("expected Dim"),
+        }
+    }
+
+    #[test]
+    fn test_dim_with_as_type_default_integer() {
+        let src = "DIM arr(10)";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::Dim { declarations } => {
+                assert_eq!(declarations[0].array_type.base_type.name, "INTEGER");
+            }
+            _ => panic!("expected Dim"),
+        }
+    }
+
+    #[test]
+    fn test_dim_multiple_with_as_type() {
+        let src = "DIM a(5) AS U32, b(10) AS STRING";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::Dim { declarations } => {
+                assert_eq!(declarations.len(), 2);
+                assert_eq!(declarations[0].array_type.base_type.name, "U32");
+                assert_eq!(declarations[1].array_type.base_type.name, "STRING");
+            }
+            _ => panic!("expected Dim"),
+        }
+    }
+
+    // ---- ON ERROR / RESUME ----
+
+    #[test]
+    fn test_on_error_goto() {
+        let src = "ON ERROR GOTO handler";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::OnError { label } => {
+                assert_eq!(label, "handler");
+            }
+            _ => panic!("expected OnError"),
+        }
+    }
+
+    #[test]
+    fn test_resume() {
+        let src = "RESUME";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::Resume { label } => {
+                assert!(label.is_none());
+            }
+            _ => panic!("expected Resume"),
+        }
+    }
+
+    #[test]
+    fn test_resume_label() {
+        let src = "RESUME next_step";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::Resume { label } => {
+                assert_eq!(label.as_deref(), Some("next_step"));
+            }
+            _ => panic!("expected Resume"),
+        }
+    }
+
+    // ---- DO UNTIL ----
+
+    #[test]
+    fn test_do_until_pre() {
+        let src = "DO UNTIL done\n    PRINT \"wait\"\nLOOP";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::DoLoop {
+                variant, condition, ..
+            } => {
+                assert!(matches!(variant, rbasic::DoLoopVariant::UntilPre));
+                assert!(condition.is_some());
+            }
+            _ => panic!("expected DoLoop"),
+        }
+    }
+
+    #[test]
+    fn test_do_loop_until_post() {
+        let src = "DO\n    PRINT x\nLOOP UNTIL done";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::DoLoop {
+                variant, condition, ..
+            } => {
+                assert!(matches!(variant, rbasic::DoLoopVariant::UntilPost));
+                assert!(condition.is_some());
+            }
+            _ => panic!("expected DoLoop"),
+        }
+    }
+
+    // ---- AND / OR / XOR ----
+
+    #[test]
+    fn test_binary_and() {
+        let src = "LET a: BOOL = TRUE AND FALSE";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::VarDecl { init, .. } => match init {
+                rbasic::Expression::Binary { op, .. } => {
+                    assert_eq!(*op, rbasic::BinaryOp::And);
+                }
+                _ => panic!("expected binary expression"),
+            },
+            _ => panic!("expected VarDecl"),
+        }
+    }
+
+    #[test]
+    fn test_binary_or() {
+        let src = "LET a: BOOL = TRUE OR FALSE";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::VarDecl { init, .. } => match init {
+                rbasic::Expression::Binary { op, .. } => {
+                    assert_eq!(*op, rbasic::BinaryOp::Or);
+                }
+                _ => panic!("expected binary expression"),
+            },
+            _ => panic!("expected VarDecl"),
+        }
+    }
+
+    #[test]
+    fn test_binary_xor() {
+        let src = "LET a: I32 = 1 XOR 0";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::VarDecl { init, .. } => match init {
+                rbasic::Expression::Binary { op, .. } => {
+                    assert_eq!(*op, rbasic::BinaryOp::Xor);
+                }
+                _ => panic!("expected binary expression"),
+            },
+            _ => panic!("expected VarDecl"),
+        }
+    }
+
+    // ---- SHL / SHR ----
+
+    #[test]
+    fn test_binary_shl() {
+        let src = "LET a: I32 = 1 SHL 2";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::VarDecl { init, .. } => match init {
+                rbasic::Expression::Binary { op, .. } => {
+                    assert_eq!(*op, rbasic::BinaryOp::Shl);
+                }
+                _ => panic!("expected binary expression"),
+            },
+            _ => panic!("expected VarDecl"),
+        }
+    }
+
+    #[test]
+    fn test_binary_shr() {
+        let src = "LET a: I32 = 8 SHR 1";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::VarDecl { init, .. } => match init {
+                rbasic::Expression::Binary { op, .. } => {
+                    assert_eq!(*op, rbasic::BinaryOp::Shr);
+                }
+                _ => panic!("expected binary expression"),
+            },
+            _ => panic!("expected VarDecl"),
+        }
+    }
+
+    // ---- NOT unary ----
+
+    #[test]
+    fn test_unary_not_expression() {
+        let src = "LET a: BOOL = NOT TRUE";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::VarDecl { init, .. } => match init {
+                rbasic::Expression::Unary { op, .. } => {
+                    assert_eq!(*op, rbasic::UnaryOp::Not);
+                }
+                _ => panic!("expected unary expression"),
+            },
+            _ => panic!("expected VarDecl"),
+        }
+    }
+
+    // ---- TRUE / FALSE ----
+
+    #[test]
+    fn test_bool_literal_true() {
+        let src = "LET a: BOOL = TRUE";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::VarDecl { init, .. } => match init {
+                rbasic::Expression::Literal(rbasic::Literal::Bool(true)) => {}
+                _ => panic!("expected Bool(true)"),
+            },
+            _ => panic!("expected VarDecl"),
+        }
+    }
+
+    #[test]
+    fn test_bool_literal_false() {
+        let src = "LET a: BOOL = FALSE";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::VarDecl { init, .. } => match init {
+                rbasic::Expression::Literal(rbasic::Literal::Bool(false)) => {}
+                _ => panic!("expected Bool(false)"),
+            },
+            _ => panic!("expected VarDecl"),
+        }
+    }
+
+    // ---- Pow / Mod / IntDiv ----
+
+    #[test]
+    fn test_binary_pow() {
+        let src = "PRINT 2 ^ 3";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::Print { expr } => match expr {
+                rbasic::Expression::Binary { op, .. } => {
+                    assert_eq!(*op, rbasic::BinaryOp::Pow);
+                }
+                _ => panic!("expected binary expression"),
+            },
+            _ => panic!("expected Print"),
+        }
+    }
+
+    #[test]
+    fn test_binary_mod() {
+        let src = "PRINT 10 MOD 3";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::Print { expr } => match expr {
+                rbasic::Expression::Binary { op, .. } => {
+                    assert_eq!(*op, rbasic::BinaryOp::Mod);
+                }
+                _ => panic!("expected binary expression"),
+            },
+            _ => panic!("expected Print"),
+        }
+    }
+
+    #[test]
+    fn test_binary_intdiv() {
+        let src = "PRINT 7 \\ 3";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::Print { expr } => match expr {
+                rbasic::Expression::Binary { op, .. } => {
+                    assert_eq!(*op, rbasic::BinaryOp::IntDiv);
+                }
+                _ => panic!("expected binary expression"),
+            },
+            _ => panic!("expected Print"),
+        }
+    }
+
+    // ---- AS cast ----
+
+    #[test]
+    fn test_as_cast() {
+        let src = "PRINT 42 AS I32";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::Print { expr } => match expr {
+                rbasic::Expression::Cast { target_type, .. } => {
+                    assert_eq!(target_type, "I32");
+                }
+                _ => panic!("expected Cast expression"),
+            },
+            _ => panic!("expected Print"),
+        }
+    }
+
+    // ---- Multiple functions ----
+
+    #[test]
+    fn test_multiple_functions() {
+        let src = "FUNCTION a()\nEND FUNCTION\nFUNCTION b()\nEND FUNCTION";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        assert_eq!(prog.statements.len(), 2);
+    }
+
+    // ---- Operator precedence via grouping ----
+
+    #[test]
+    fn test_mul_over_add_precedence() {
+        let src = "PRINT 1 + 2 * 3";
+        let tokens = lex(src);
+        let mut parser = Parser::new(tokens);
+        let prog = parser.parse_program().expect("parse error");
+        match &prog.statements[0] {
+            Statement::Print { expr } => match expr {
+                rbasic::Expression::Binary { left: _, op, right } => {
+                    assert_eq!(op, &rbasic::BinaryOp::Add);
+                    match right.as_ref() {
+                        rbasic::Expression::Binary { op: rop, .. } => {
+                            assert_eq!(rop, &rbasic::BinaryOp::Mul);
+                        }
+                        _ => panic!("expected Mul as right operand"),
+                    }
+                }
+                _ => panic!("expected binary Add"),
+            },
+            _ => panic!("expected Print"),
+        }
+    }
 }

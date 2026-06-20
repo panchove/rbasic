@@ -543,7 +543,8 @@ mod tests {
 
     #[test]
     fn for_step_bounds_mismatch() {
-        assert!(has_error("FOR i = 1 TO 10 STEP 1.5\nEND FOR", "E1020"));
+        // I32 bounds + F64 step is valid with integer-to-float widening
+        assert!(analyze_src("FOR i = 1 TO 10 STEP 1.5\nEND FOR").is_ok());
     }
 
     #[test]
@@ -663,6 +664,14 @@ mod tests {
         assert!(analyze_src("LET w: WORD = 1024").is_ok());
     }
     #[test]
+    fn alias_dword() {
+        assert!(analyze_src("LET dw: DWORD = 65535").is_ok());
+    }
+    #[test]
+    fn alias_qword() {
+        assert!(analyze_src("LET qw: QWORD = 4294967295").is_ok());
+    }
+    #[test]
     fn alias_integer() {
         assert!(analyze_src("LET n: INTEGER = 42").is_ok());
     }
@@ -701,5 +710,198 @@ mod tests {
     #[test]
     fn alias_unknown_still_fails() {
         assert!(has_error("LET x: VARIANT = 0", "E1010"));
+    }
+
+    // ---- Assignment (RFC-0015) ----
+
+    #[test]
+    fn assign_to_mutable_ok() {
+        assert!(analyze_src("LET MUT x: I32 = 0\nx = 42").is_ok());
+    }
+
+    #[test]
+    fn assign_to_immutable_fails() {
+        assert!(has_error("LET x: I32 = 0\nx = 42", "E1042"));
+    }
+
+    #[test]
+    fn assign_to_undeclared_fails() {
+        assert!(has_error("x = 42", "E1040"));
+    }
+
+    #[test]
+    fn assign_type_mismatch_fails() {
+        assert!(has_error("LET MUT x: I32 = 0\nx = TRUE", "E1041"));
+    }
+
+    #[test]
+    fn assign_string_type_mismatch_fails() {
+        assert!(has_error("LET MUT s: STRING = \"hi\"\ns = 42", "E1041"));
+    }
+
+    #[test]
+    fn assign_for_loop_var_ok() {
+        assert!(analyze_src("FOR i = 1 TO 5\n    i = i + 1\nEND FOR").is_ok());
+    }
+
+    #[test]
+    fn assign_param_ok() {
+        let src = "FUNCTION foo(x: I32)\n    x = 10\nEND FUNCTION";
+        assert!(analyze_src(src).is_ok());
+    }
+
+    // ---- DIM array (RFC-0016) ----
+
+    #[test]
+    fn dim_semantic_register() {
+        assert!(analyze_src("DIM arr(10)").is_ok());
+    }
+
+    #[test]
+    fn dim_with_as_type_f64() {
+        assert!(analyze_src("DIM arr(10) AS F64").is_ok());
+    }
+
+    #[test]
+    fn dim_with_as_type_string() {
+        assert!(analyze_src("DIM s(5) AS STRING").is_ok());
+    }
+
+    #[test]
+    fn dim_duplicate_emits_e1002() {
+        assert!(has_error("DIM a(10)\nDIM a(20)", "E1002"));
+    }
+
+    #[test]
+    fn dim_duplicate_not_e1003() {
+        // Regression: duplicate DIM should NOT emit E1003
+        assert!(!has_error("DIM a(10)\nDIM a(20)", "E1003"));
+    }
+
+    // ---- Built-in String Functions (RFC-0017) ----
+
+    #[test]
+    fn builtin_len_ok() {
+        assert!(analyze_src("LET MUT s: STRING = \"hi\"\nPRINT LEN(s)").is_ok());
+    }
+
+    #[test]
+    fn builtin_len_wrong_type_fails() {
+        assert!(has_error("PRINT LEN(42)", "E1020"));
+    }
+
+    #[test]
+    fn builtin_mid_ok() {
+        assert!(analyze_src("PRINT MID$(\"hello\", 2, 3)").is_ok());
+    }
+
+    #[test]
+    fn builtin_mid_wrong_args_fails() {
+        assert!(has_error("PRINT MID$(\"hello\", 2)", "E1030"));
+    }
+
+    #[test]
+    fn builtin_left_ok() {
+        assert!(analyze_src("PRINT LEFT$(\"hello\", 2)").is_ok());
+    }
+
+    #[test]
+    fn builtin_right_ok() {
+        assert!(analyze_src("PRINT RIGHT$(\"hello\", 2)").is_ok());
+    }
+
+    #[test]
+    fn builtin_chr_ok() {
+        assert!(analyze_src("PRINT CHR$(65)").is_ok());
+    }
+
+    #[test]
+    fn builtin_chr_wrong_type_fails() {
+        assert!(has_error("PRINT CHR$(\"hello\")", "E1020"));
+    }
+
+    #[test]
+    fn builtin_asc_ok() {
+        assert!(analyze_src("PRINT ASC(\"A\")").is_ok());
+    }
+
+    #[test]
+    fn builtin_asc_wrong_type_fails() {
+        assert!(has_error("PRINT ASC(42)", "E1020"));
+    }
+
+    #[test]
+    fn builtin_instr_2arg_ok() {
+        assert!(analyze_src("PRINT INSTR(\"hello\", \"ll\")").is_ok());
+    }
+
+    #[test]
+    fn builtin_instr_3arg_ok() {
+        assert!(analyze_src("PRINT INSTR(1, \"hello\", \"ll\")").is_ok());
+    }
+
+    #[test]
+    fn builtin_instr_wrong_args_fails() {
+        assert!(has_error("PRINT INSTR(\"hello\")", "E1030"));
+    }
+
+    #[test]
+    fn builtin_val_ok() {
+        assert!(analyze_src("PRINT VAL(\"42.5\")").is_ok());
+    }
+
+    #[test]
+    fn builtin_str_ok() {
+        assert!(analyze_src("PRINT STR$(42)").is_ok());
+    }
+
+    #[test]
+    fn builtin_ucase_ok() {
+        assert!(analyze_src("PRINT UCASE$(\"hello\")").is_ok());
+    }
+
+    #[test]
+    fn builtin_lcase_ok() {
+        assert!(analyze_src("PRINT LCASE$(\"HELLO\")").is_ok());
+    }
+
+    #[test]
+    fn builtin_trim_ok() {
+        assert!(analyze_src("PRINT TRIM$(\"  hi  \")").is_ok());
+    }
+
+    #[test]
+    fn builtin_ltrim_ok() {
+        assert!(analyze_src("PRINT LTRIM$(\"  hi  \")").is_ok());
+    }
+
+    #[test]
+    fn builtin_rtrim_ok() {
+        assert!(analyze_src("PRINT RTRIM$(\"  hi  \")").is_ok());
+    }
+
+    #[test]
+    fn builtin_space_ok() {
+        assert!(analyze_src("PRINT SPACE$(3)").is_ok());
+    }
+
+    #[test]
+    fn builtin_string_ok() {
+        assert!(analyze_src("PRINT STRING$(3, \"A\")").is_ok());
+    }
+
+    #[test]
+    fn builtin_nested_ok() {
+        assert!(analyze_src("PRINT LEFT$(UCASE$(\"hello\"), 3)").is_ok());
+    }
+
+    #[test]
+    fn builtin_non_dollar_alias_ok() {
+        assert!(analyze_src("PRINT MID(\"hello\", 2, 3)").is_ok());
+    }
+
+    #[test]
+    fn builtin_unknown_fails() {
+        assert!(has_error("PRINT FOO$(\"hello\")", "E1003"));
     }
 }
