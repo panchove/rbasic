@@ -647,4 +647,59 @@ mod tests {
     fn string_concat() {
         assert!(analyze_src("LET s: STRING = \"hi\" + \"!\"").is_ok());
     }
+
+    // ---- RFC-0011: Classic BASIC type aliases ----
+
+    #[test]
+    fn alias_boolean() {
+        assert!(analyze_src("LET f: BOOLEAN = TRUE").is_ok());
+    }
+    #[test]
+    fn alias_byte() {
+        assert!(analyze_src("LET b: BYTE = 10").is_ok());
+    }
+    #[test]
+    fn alias_word() {
+        assert!(analyze_src("LET w: WORD = 1024").is_ok());
+    }
+    #[test]
+    fn alias_integer() {
+        assert!(analyze_src("LET n: INTEGER = 42").is_ok());
+    }
+    #[test]
+    fn alias_long() {
+        assert!(analyze_src("LET n: LONG = 9999999").is_ok());
+    }
+    #[test]
+    fn alias_longlong() {
+        assert!(analyze_src("LET n: LONGLONG = 9999999999").is_ok());
+    }
+    #[test]
+    fn alias_single() {
+        assert!(analyze_src("LET x: SINGLE = 1.5").is_ok());
+    }
+    #[test]
+    fn alias_double() {
+        assert!(analyze_src("LET x: DOUBLE = 3.14").is_ok());
+    }
+    #[test]
+    fn alias_case_insensitive() {
+        assert!(analyze_src("LET n: integer = 1").is_ok());
+        assert!(analyze_src("LET n: Double = 1.0").is_ok());
+        assert!(analyze_src("LET f: Boolean = TRUE").is_ok());
+    }
+    #[test]
+    fn alias_in_function_param() {
+        let src =
+            "FUNCTION Add(a: INTEGER, b: INTEGER) RETURNS INTEGER\n    RETURN a + b\nEND FUNCTION";
+        assert!(analyze_src(src).is_ok());
+    }
+    #[test]
+    fn alias_in_cast() {
+        assert!(analyze_src("PRINT 3.14 AS INTEGER").is_ok());
+    }
+    #[test]
+    fn alias_unknown_still_fails() {
+        assert!(has_error("LET x: VARIANT = 0", "E1010"));
+    }
 }
