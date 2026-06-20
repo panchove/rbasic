@@ -34,6 +34,8 @@ impl Type {
             "BOOLEAN" => Some(Type::Bool),
             "BYTE" => Some(Type::U8),
             "WORD" => Some(Type::U16),
+            "DWORD" => Some(Type::U32),
+            "QWORD" => Some(Type::U64),
             "INTEGER" => Some(Type::I32),
             "LONG" | "LONGLONG" => Some(Type::I64),
             "SINGLE" => Some(Type::F32),

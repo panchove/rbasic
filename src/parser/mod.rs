@@ -175,9 +175,13 @@ impl Parser {
                 }
             }
             self.expect(TokenKind::RParen, "expected ')' after array dimensions")?;
-            let base_type = TypeRef {
-                name: "INTEGER".to_string(),
-            }; // Default type
+            let base_type = if self.match_kind(TokenKind::As) {
+                self.type_ref()?
+            } else {
+                TypeRef {
+                    name: "INTEGER".to_string(),
+                }
+            };
             let array_type = ArrayType {
                 base_type: Box::new(base_type),
                 dimensions,
@@ -269,6 +273,60 @@ impl Parser {
             TokenKind::Do => self.do_stmt(),
             TokenKind::On => self.on_error_stmt(),
             TokenKind::Resume => self.resume_stmt(),
+            TokenKind::Identifier(_) => {
+                // Check for array assignment: arr(0) = 42
+                let next_is_lparen = self
+                    .tokens
+                    .get(self.current + 1)
+                    .map(|t| t.kind == TokenKind::LParen)
+                    .unwrap_or(false);
+                if next_is_lparen {
+                    // Could be array assignment arr(...) = expr
+                    // Peek further: find matching ')' and check if '=' follows
+                    if self.is_array_assign() {
+                        let name = if let TokenKind::Identifier(s) = self.advance().kind {
+                            s
+                        } else {
+                            unreachable!()
+                        };
+                        self.advance(); // consume (
+                        let mut indices = Vec::new();
+                        loop {
+                            indices.push(self.expression()?);
+                            if !self.match_kind(TokenKind::Comma) {
+                                break;
+                            }
+                        }
+                        self.expect(TokenKind::RParen, "expected ')' after array indices")?;
+                        self.expect(TokenKind::Assign, "expected '=' in array assignment")?;
+                        let value = self.expression()?;
+                        return Ok(Statement::ArrayAssign {
+                            name,
+                            indices,
+                            value,
+                        });
+                    }
+                }
+                let next_is_assign = self
+                    .tokens
+                    .get(self.current + 1)
+                    .map(|t| t.kind == TokenKind::Assign)
+                    .unwrap_or(false);
+                if next_is_assign {
+                    let id = self.advance();
+                    let name = if let TokenKind::Identifier(s) = id.kind {
+                        s
+                    } else {
+                        unreachable!()
+                    };
+                    self.advance(); // consume =
+                    let expr = self.expression()?;
+                    Ok(Statement::Assign { name, expr })
+                } else {
+                    let expr = self.expression()?;
+                    Ok(Statement::ExpressionStmt { expr })
+                }
+            }
             _ => {
                 let expr = self.expression()?;
                 Ok(Statement::ExpressionStmt { expr })
@@ -411,6 +469,38 @@ impl Parser {
         // Verify but do not consume the trailing WHILE token.
         self.match_kind(TokenKind::While);
         Ok(Statement::While { condition, body })
+    }
+
+    /// Peek ahead to check if the current identifier is followed by
+    /// `( ... ) =` (array assignment pattern).
+    fn is_array_assign(&self) -> bool {
+        let mut depth = 0;
+        let mut i = self.current + 1; // skip the identifier token
+        loop {
+            let tok = self.tokens.get(i);
+            match tok.map(|t| &t.kind) {
+                Some(TokenKind::LParen) => {
+                    depth += 1;
+                    i += 1;
+                }
+                Some(TokenKind::RParen) => {
+                    depth -= 1;
+                    i += 1;
+                    if depth == 0 {
+                        // Check if next token is Assign
+                        return self
+                            .tokens
+                            .get(i)
+                            .map(|t| t.kind == TokenKind::Assign)
+                            .unwrap_or(false);
+                    }
+                }
+                Some(_) => {
+                    i += 1;
+                }
+                None => return false,
+            }
+        }
     }
 
     fn expression(&mut self) -> Result<Expression, ParseError> {

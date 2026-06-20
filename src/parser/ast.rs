@@ -41,6 +41,15 @@ pub enum Statement {
     ExpressionStmt {
         expr: Expression,
     },
+    Assign {
+        name: String,
+        expr: Expression,
+    },
+    ArrayAssign {
+        name: String,
+        indices: Vec<Expression>,
+        value: Expression,
+    },
     FunctionDecl {
         name: String,
         params: Vec<Param>,
@@ -85,6 +94,10 @@ pub enum Expression {
     Call {
         callee: String,
         args: Vec<Expression>,
+    },
+    ArrayAccess {
+        name: String,
+        indices: Vec<Expression>,
     },
 }
 

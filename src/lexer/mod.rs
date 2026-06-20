@@ -209,6 +209,35 @@ pub fn lex(input: &str) -> (Vec<Token>, Vec<LexError>) {
                         break;
                     }
                 }
+                // Check for optional trailing $ suffix
+                if let Some(&(idx, '$')) = chars.peek() {
+                    ident.push('$');
+                    end = idx + 1;
+                    chars.next();
+                    // Verify $ is truly the last character of the identifier
+                    let mut has_trailing = false;
+                    while let Some(&(idx2, nxt2)) = chars.peek() {
+                        if nxt2.is_alphanumeric() || nxt2 == '_' || nxt2 == '$' {
+                            has_trailing = true;
+                            ident.push(nxt2);
+                            end = idx2 + nxt2.len_utf8();
+                            chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+                    if has_trailing {
+                        errors.push(LexError {
+                            code: LexErrorCode::InvalidChar,
+                            message: format!(
+                                "invalid identifier '{}': '$' must be the last character",
+                                ident
+                            ),
+                            span: Span::new(start, end),
+                        });
+                        continue;
+                    }
+                }
                 // Boolean literals (case-insensitive)
                 match ident.to_ascii_uppercase().as_str() {
                     "TRUE" => {
