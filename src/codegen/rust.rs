@@ -226,6 +226,13 @@ fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
             gen_expr(expr, out);
             out.push_str(";\n");
         }
+        Statement::Assign { name, expr } => {
+            out.push_str(&pad);
+            out.push_str(name);
+            out.push_str(" = ");
+            gen_expr(expr, out);
+            out.push_str(";\n");
+        }
         Statement::FunctionDecl {
             name,
             params,
@@ -256,8 +263,51 @@ fn gen_stmt(stmt: &Statement, out: &mut String, indent: usize) {
             out.push_str(&pad);
             out.push_str("}\n");
         }
-        // v0.2 features — no codegen in v0.1
-        Statement::Dim { .. } => {}
+        // DIM arrays (RFC-0016)
+        Statement::Dim { declarations } => {
+            for decl in declarations {
+                let base_type =
+                    Type::from_name(&decl.array_type.base_type.name).unwrap_or(Type::I32);
+                let dims = &decl.array_type.dimensions;
+                let n = dims.len();
+                out.push_str(&pad);
+                out.push_str("let ");
+                out.push_str(&decl.name);
+                out.push_str(": ");
+                // Vec<Vec<...<T>...>>
+                for _ in 0..n {
+                    out.push_str("Vec<");
+                }
+                out.push_str(&type_to_rust(base_type.to_rust_str()));
+                for _ in 0..n {
+                    out.push('>');
+                }
+                out.push_str(" = ");
+                if n == 0 {
+                    out.push_str("Vec::new()");
+                } else {
+                    let default = default_for_type(&base_type);
+                    gen_dim_init(dims, &default, out, 0);
+                }
+                out.push_str(";\n");
+            }
+        }
+        Statement::ArrayAssign {
+            name,
+            indices,
+            value,
+        } => {
+            out.push_str(&pad);
+            out.push_str(name);
+            for idx in indices {
+                out.push('[');
+                gen_expr(idx, out);
+                out.push_str(" as usize]");
+            }
+            out.push_str(" = ");
+            gen_expr(value, out);
+            out.push_str(";\n");
+        }
         Statement::OnError { .. } => {}
         Statement::Resume { .. } => {}
     }
@@ -278,7 +328,7 @@ fn gen_expr(expr: &Expression, out: &mut String) {
             Literal::String(s) => {
                 out.push('"');
                 out.push_str(&escape_string(s));
-                out.push('"');
+                out.push_str("\".to_string()");
             }
             Literal::Bool(v) => out.push_str(if *v { "true" } else { "false" }),
         },
@@ -340,15 +390,27 @@ fn gen_expr(expr: &Expression, out: &mut String) {
             out.push_str(&target);
         }
         Expression::Call { callee, args } => {
-            out.push_str(callee);
-            out.push('(');
-            for (i, a) in args.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
+            if is_builtin(callee) {
+                gen_builtin_call(callee, args, out);
+            } else {
+                out.push_str(callee);
+                out.push('(');
+                for (i, a) in args.iter().enumerate() {
+                    if i > 0 {
+                        out.push_str(", ");
+                    }
+                    gen_expr(a, out);
                 }
-                gen_expr(a, out);
+                out.push(')');
             }
-            out.push(')');
+        }
+        Expression::ArrayAccess { name, indices } => {
+            out.push_str(name);
+            for idx in indices {
+                out.push('[');
+                gen_expr(idx, out);
+                out.push_str(" as usize]");
+            }
         }
     }
 }
@@ -377,4 +439,178 @@ fn escape_string(s: &str) -> String {
         .replace('\n', "\\n")
         .replace('\r', "\\r")
         .replace('\t', "\\t")
+}
+
+fn default_for_type(t: &Type) -> String {
+    match t {
+        Type::Bool => "false".to_string(),
+        Type::I8 => "0i8".to_string(),
+        Type::I16 => "0i16".to_string(),
+        Type::I32 => "0i32".to_string(),
+        Type::I64 => "0i64".to_string(),
+        Type::U8 => "0u8".to_string(),
+        Type::U16 => "0u16".to_string(),
+        Type::U32 => "0u32".to_string(),
+        Type::U64 => "0u64".to_string(),
+        Type::F32 => "0.0f32".to_string(),
+        Type::F64 => "0.0f64".to_string(),
+        Type::String => "String::new()".to_string(),
+    }
+}
+
+fn gen_dim_init(dims: &[Expression], default: &str, out: &mut String, idx: usize) {
+    if idx >= dims.len() {
+        out.push_str(default);
+        return;
+    }
+    let size = if let Expression::Literal(Literal::Int(v)) = &dims[idx] {
+        *v + 1
+    } else {
+        0
+    };
+    out.push_str("vec![");
+    gen_dim_init(dims, default, out, idx + 1);
+    write!(out, "; {}]", size).unwrap();
+}
+
+fn is_builtin(name: &str) -> bool {
+    matches!(
+        name.to_lowercase().as_str(),
+        "len"
+            | "mid$"
+            | "mid"
+            | "left$"
+            | "left"
+            | "right$"
+            | "right"
+            | "chr$"
+            | "chr"
+            | "asc"
+            | "instr"
+            | "val"
+            | "str$"
+            | "str"
+            | "ucase$"
+            | "ucase"
+            | "lcase$"
+            | "lcase"
+            | "trim$"
+            | "trim"
+            | "ltrim$"
+            | "ltrim"
+            | "rtrim$"
+            | "rtrim"
+            | "space$"
+            | "space"
+            | "string$"
+            | "string"
+    )
+}
+
+fn gen_builtin_call(callee: &str, args: &[Expression], out: &mut String) {
+    match callee.to_lowercase().as_str() {
+        "len" => {
+            gen_expr(&args[0], out);
+            out.push_str(".len() as i32");
+        }
+        "mid$" | "mid" => {
+            gen_expr(&args[0], out);
+            out.push_str(".chars().skip((");
+            gen_expr(&args[1], out);
+            out.push_str(" - 1) as usize).take(");
+            gen_expr(&args[2], out);
+            out.push_str(" as usize).collect::<String>()");
+        }
+        "left$" | "left" => {
+            gen_expr(&args[0], out);
+            out.push_str(".chars().take(");
+            gen_expr(&args[1], out);
+            out.push_str(" as usize).collect::<String>()");
+        }
+        "right$" | "right" => {
+            gen_expr(&args[0], out);
+            out.push_str(".chars().rev().take(");
+            gen_expr(&args[1], out);
+            out.push_str(" as usize).collect::<String>().chars().rev().collect::<String>()");
+        }
+        "chr$" | "chr" => {
+            out.push_str("char::from_u32(");
+            gen_expr(&args[0], out);
+            out.push_str(" as u32).map(|c| c.to_string()).unwrap_or_default()");
+        }
+        "asc" => {
+            gen_expr(&args[0], out);
+            out.push_str(".chars().next().map(|c| c as i32).unwrap_or(0)");
+        }
+        "instr" => {
+            if args.len() == 2 {
+                gen_expr(&args[0], out);
+                out.push_str(".find(&");
+                gen_expr(&args[1], out);
+                out.push_str(").map(|i| i as i32 + 1).unwrap_or(0)");
+            } else {
+                out.push('(');
+                gen_expr(&args[1], out);
+                out.push('[');
+                gen_expr(&args[0], out);
+                out.push_str(" as usize..]).find(&");
+                gen_expr(&args[2], out);
+                out.push_str(").map(|i| (i + ");
+                gen_expr(&args[0], out);
+                out.push_str(" as usize) as i32 + 1).unwrap_or(0)");
+            }
+        }
+        "val" => {
+            out.push('(');
+            gen_expr(&args[0], out);
+            out.push_str(".trim().parse::<f64>().unwrap_or(0.0))");
+        }
+        "str$" | "str" => {
+            gen_expr(&args[0], out);
+            out.push_str(".to_string()");
+        }
+        "ucase$" | "ucase" => {
+            gen_expr(&args[0], out);
+            out.push_str(".to_uppercase()");
+        }
+        "lcase$" | "lcase" => {
+            gen_expr(&args[0], out);
+            out.push_str(".to_lowercase()");
+        }
+        "trim$" | "trim" => {
+            gen_expr(&args[0], out);
+            out.push_str(".trim().to_string()");
+        }
+        "ltrim$" | "ltrim" => {
+            gen_expr(&args[0], out);
+            out.push_str(".trim_start().to_string()");
+        }
+        "rtrim$" | "rtrim" => {
+            gen_expr(&args[0], out);
+            out.push_str(".trim_end().to_string()");
+        }
+        "space$" | "space" => {
+            out.push_str("\" \".repeat(");
+            gen_expr(&args[0], out);
+            out.push_str(" as usize)");
+        }
+        "string$" | "string" => {
+            gen_expr(&args[1], out);
+            out.push_str(".repeat(");
+            gen_expr(&args[0], out);
+            out.push_str(" as usize)");
+        }
+        _ => {
+            // Fallback: generic call (should not happen since is_builtin check passes)
+            out.push_str(callee);
+            out.push('(');
+            for (i, a) in args.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                gen_expr(a, out);
+            }
+            out.push(')');
+        }
+    }
 }

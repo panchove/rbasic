@@ -3,6 +3,9 @@ use crate::semantic::errors::{SemanticError, SemanticErrorCode};
 use crate::semantic::types::Type;
 use std::collections::HashMap;
 
+/// Information about a declared array: (base_type, dimension_count).
+pub type ArrayInfo = HashMap<String, (Type, usize)>;
+
 /// Returns true if `actual` can be assigned to `expected` (implicit widening allowed).
 fn types_compatible(expected: &Type, actual: &Type) -> bool {
     if expected == actual {
@@ -37,6 +40,13 @@ fn types_compatible(expected: &Type, actual: &Type) -> bool {
         return true;
     }
     if *expected == Type::F32 && *actual == Type::F64 {
+        return true;
+    }
+    // Integer to float widening
+    if *expected == Type::F64 && actual.is_integer() {
+        return true;
+    }
+    if *expected == Type::F32 && actual.is_integer() {
         return true;
     }
     // String concatenation compatibility
@@ -145,13 +155,15 @@ struct FuncSig {
     ret_type: Option<Type>,
 }
 
-pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
+pub fn analyze(prog: &Program) -> Result<ArrayInfo, Vec<SemanticError>> {
     let mut errors: Vec<SemanticError> = Vec::new();
 
     // Collect function signatures
     let mut functions: HashMap<String, FuncSig> = HashMap::new();
     // Track global variable types and whether they're declared
     let mut globals: HashMap<String, Type> = HashMap::new();
+    // Track declared arrays: name -> (base_type, dimension_count)
+    let mut arrays: ArrayInfo = HashMap::new();
     // ON ERROR / RESUME labels are tracked at runtime; no semantic validation in v0.1.
 
     // Helper: push error
@@ -238,11 +250,166 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
     }
 
     // Resolve expression type
-    fn resolve_expr(
-        expr: &Expression,
-        locals: &HashMap<String, Type>,
+    #[allow(clippy::too_many_arguments)]
+    fn check_function_call(
+        callee: &str,
+        args: &[Expression],
+        param_types: &[Type],
+        ret_type: Option<Type>,
+        locals: &HashMap<String, (Type, bool)>,
         globals: &HashMap<String, Type>,
         functions: &HashMap<String, FuncSig>,
+        arrays: &ArrayInfo,
+        errors: &mut Vec<SemanticError>,
+    ) -> Option<Type> {
+        if args.len() != param_types.len() {
+            err(
+                errors,
+                SemanticErrorCode::E1030,
+                format!(
+                    "Function {} expects {} arguments, got {}",
+                    callee,
+                    param_types.len(),
+                    args.len()
+                ),
+            );
+        }
+        for (i, arg) in args.iter().enumerate() {
+            let arg_type = resolve_expr(arg, locals, globals, functions, arrays, errors);
+            if i < param_types.len() {
+                if let Some(actual) = &arg_type {
+                    if !types_compatible(&param_types[i], actual) {
+                        err(
+                            errors,
+                            SemanticErrorCode::E1020,
+                            format!(
+                                "Argument {} of {} expected type {}, got {}",
+                                i + 1,
+                                callee,
+                                param_types[i].to_rust_str(),
+                                actual.to_rust_str(),
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+        ret_type
+    }
+
+    /// Check if the callee is a known built-in function and validate its arguments.
+    /// Returns the return type if valid, or None if not a built-in.
+    fn check_builtin_call(
+        callee: &str,
+        args: &[Expression],
+        locals: &HashMap<String, (Type, bool)>,
+        globals: &HashMap<String, Type>,
+        functions: &HashMap<String, FuncSig>,
+        arrays: &ArrayInfo,
+        errors: &mut Vec<SemanticError>,
+    ) -> Option<Type> {
+        let key = callee.to_lowercase();
+        // INSTR has two overloads (2-arg and 3-arg)
+        if key == "instr" {
+            return match args.len() {
+                2 => {
+                    for (i, arg) in args.iter().enumerate() {
+                        let arg_type =
+                            resolve_expr(arg, locals, globals, functions, arrays, errors);
+                        if let Some(actual) = &arg_type {
+                            if !types_compatible(&Type::String, actual) {
+                                err(
+                                    errors,
+                                    SemanticErrorCode::E1020,
+                                    format!(
+                                        "Argument {} of INSTR expected type STRING, got {}",
+                                        i + 1,
+                                        actual.to_rust_str(),
+                                    ),
+                                );
+                            }
+                        }
+                    }
+                    Some(Type::I32)
+                }
+                3 => {
+                    // INSTR(start, s, search) → (I32, STRING, STRING) → I32
+                    let param_types = [Type::I32, Type::String, Type::String];
+                    for (i, arg) in args.iter().enumerate() {
+                        let arg_type =
+                            resolve_expr(arg, locals, globals, functions, arrays, errors);
+                        if i < param_types.len() {
+                            if let Some(actual) = &arg_type {
+                                if !types_compatible(&param_types[i], actual) {
+                                    err(
+                                        errors,
+                                        SemanticErrorCode::E1020,
+                                        format!(
+                                            "Argument {} of INSTR expected type {}, got {}",
+                                            i + 1,
+                                            param_types[i].to_rust_str(),
+                                            actual.to_rust_str(),
+                                        ),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    Some(Type::I32)
+                }
+                _ => {
+                    err(
+                        errors,
+                        SemanticErrorCode::E1030,
+                        format!("INSTR expects 2 or 3 arguments, got {}", args.len()),
+                    );
+                    Some(Type::I32)
+                }
+            };
+        }
+        // All other built-in functions have fixed signatures
+        let sig = builtin_sig(&key)?;
+        check_function_call(
+            callee,
+            args,
+            &sig.0,
+            Some(sig.1.clone()),
+            locals,
+            globals,
+            functions,
+            arrays,
+            errors,
+        )
+    }
+
+    /// Return the parameter types and return type for a known built-in function.
+    fn builtin_sig(key: &str) -> Option<(Vec<Type>, Type)> {
+        match key {
+            "len" => Some((vec![Type::String], Type::I32)),
+            "mid$" | "mid" => Some((vec![Type::String, Type::I32, Type::I32], Type::String)),
+            "left$" | "left" => Some((vec![Type::String, Type::I32], Type::String)),
+            "right$" | "right" => Some((vec![Type::String, Type::I32], Type::String)),
+            "chr$" | "chr" => Some((vec![Type::I32], Type::String)),
+            "asc" => Some((vec![Type::String], Type::I32)),
+            "val" => Some((vec![Type::String], Type::F64)),
+            "str$" | "str" => Some((vec![Type::F64], Type::String)),
+            "ucase$" | "ucase" => Some((vec![Type::String], Type::String)),
+            "lcase$" | "lcase" => Some((vec![Type::String], Type::String)),
+            "trim$" | "trim" => Some((vec![Type::String], Type::String)),
+            "ltrim$" | "ltrim" => Some((vec![Type::String], Type::String)),
+            "rtrim$" | "rtrim" => Some((vec![Type::String], Type::String)),
+            "space$" | "space" => Some((vec![Type::I32], Type::String)),
+            "string$" | "string" => Some((vec![Type::I32, Type::String], Type::String)),
+            _ => None,
+        }
+    }
+
+    fn resolve_expr(
+        expr: &Expression,
+        locals: &HashMap<String, (Type, bool)>,
+        globals: &HashMap<String, Type>,
+        functions: &HashMap<String, FuncSig>,
+        arrays: &ArrayInfo,
         errors: &mut Vec<SemanticError>,
     ) -> Option<Type> {
         match expr {
@@ -256,8 +423,9 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                 let key = name.to_lowercase();
                 locals
                     .get(&key)
-                    .or_else(|| globals.get(&key))
+                    .map(|(t, _)| t)
                     .cloned()
+                    .or_else(|| globals.get(&key).cloned())
                     .or_else(|| {
                         err(
                             errors,
@@ -268,7 +436,7 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                     })
             }
             Expression::Unary { op, expr } => {
-                let inner = resolve_expr(expr, locals, globals, functions, errors);
+                let inner = resolve_expr(expr, locals, globals, functions, arrays, errors);
                 match (op, &inner) {
                     (_, None) => None,
                     (op, Some(typ)) => {
@@ -297,8 +465,8 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                 }
             }
             Expression::Binary { left, op, right } => {
-                let l = resolve_expr(left, locals, globals, functions, errors);
-                let r = resolve_expr(right, locals, globals, functions, errors);
+                let l = resolve_expr(left, locals, globals, functions, arrays, errors);
+                let r = resolve_expr(right, locals, globals, functions, arrays, errors);
                 match (op, &l, &r) {
                     (_, None, _) | (_, _, None) => None,
                     (op, Some(ref lt), Some(ref rt)) => {
@@ -462,10 +630,12 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                     }
                 }
             }
-            Expression::Grouping(inner) => resolve_expr(inner, locals, globals, functions, errors),
+            Expression::Grouping(inner) => {
+                resolve_expr(inner, locals, globals, functions, arrays, errors)
+            }
             Expression::Cast { expr, target_type } => {
-                let inner =
-                    resolve_expr(expr, locals, globals, functions, errors).unwrap_or(Type::I32);
+                let inner = resolve_expr(expr, locals, globals, functions, arrays, errors)
+                    .unwrap_or(Type::I32);
                 let target = Type::from_name(target_type);
                 match target {
                     Some(t) => {
@@ -494,42 +664,56 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
             }
             Expression::Call { callee, args } => {
                 let key = callee.to_lowercase();
-                if let Some(sig) = functions.get(&key) {
-                    // Check argument count
-                    if args.len() != sig.param_types.len() {
+                // Check if callee is a DIM'd array (array element read)
+                if let Some((base_type, expected_dims)) = arrays.get(&key) {
+                    if args.len() != *expected_dims {
                         err(
                             errors,
-                            SemanticErrorCode::E1030,
+                            SemanticErrorCode::E1062,
                             format!(
-                                "Function {} expects {} arguments, got {}",
+                                "Array {} expects {} dimensions, got {}",
                                 callee,
-                                sig.param_types.len(),
+                                expected_dims,
                                 args.len()
                             ),
                         );
                     }
-                    // Check argument types
-                    for (i, arg) in args.iter().enumerate() {
-                        let arg_type = resolve_expr(arg, locals, globals, functions, errors);
-                        if i < sig.param_types.len() {
-                            if let Some(actual) = &arg_type {
-                                if !types_compatible(&sig.param_types[i], actual) {
-                                    err(
-                                        errors,
-                                        SemanticErrorCode::E1020,
-                                        format!(
-                                            "Argument {} of {} expected type {}, got {}",
-                                            i + 1,
-                                            callee,
-                                            sig.param_types[i].to_rust_str(),
-                                            actual.to_rust_str(),
-                                        ),
-                                    );
-                                }
+                    for (i, idx) in args.iter().enumerate() {
+                        let idx_type =
+                            resolve_expr(idx, locals, globals, functions, arrays, errors);
+                        if let Some(t) = &idx_type {
+                            if !t.is_integer() {
+                                err(
+                                    errors,
+                                    SemanticErrorCode::E1061,
+                                    format!(
+                                        "Array index {} of {} must be integer, got {}",
+                                        i + 1,
+                                        callee,
+                                        t.to_rust_str()
+                                    ),
+                                );
                             }
                         }
                     }
-                    sig.ret_type.clone()
+                    return Some(base_type.clone());
+                }
+                if let Some(sig) = functions.get(&key) {
+                    check_function_call(
+                        callee,
+                        args,
+                        &sig.param_types,
+                        sig.ret_type.clone(),
+                        locals,
+                        globals,
+                        functions,
+                        arrays,
+                        errors,
+                    )
+                } else if let Some(ret) =
+                    check_builtin_call(callee, args, locals, globals, functions, arrays, errors)
+                {
+                    Some(ret)
                 } else {
                     err(
                         errors,
@@ -539,24 +723,55 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                     None
                 }
             }
+            Expression::ArrayAccess { name, indices } => {
+                // Handled via Call resolution above; fallback for completeness
+                let key = name.to_lowercase();
+                if let Some((base_type, expected_dims)) = arrays.get(&key) {
+                    if indices.len() != *expected_dims {
+                        err(
+                            errors,
+                            SemanticErrorCode::E1062,
+                            format!(
+                                "Array {} expects {} dimensions, got {}",
+                                name,
+                                expected_dims,
+                                indices.len()
+                            ),
+                        );
+                    }
+                    Some(base_type.clone())
+                } else {
+                    err(
+                        errors,
+                        SemanticErrorCode::E1060,
+                        format!("Unknown array {}", name),
+                    );
+                    None
+                }
+            }
         }
     }
 
     // Walk statements, tracking locals
+    #[allow(clippy::too_many_arguments)]
     fn walk_stmt(
         stmt: &Statement,
-        locals: &mut HashMap<String, Type>,
+        locals: &mut HashMap<String, (Type, bool)>,
         globals: &HashMap<String, Type>,
         functions: &HashMap<String, FuncSig>,
+        arrays: &mut ArrayInfo,
         errors: &mut Vec<SemanticError>,
         inside_function: bool,
         current_ret_type: Option<&Type>,
     ) {
         match stmt {
             Statement::VarDecl {
-                name, typ, init, ..
+                name,
+                is_mut,
+                typ,
+                init,
             } => {
-                let init_type = resolve_expr(init, locals, globals, functions, errors);
+                let init_type = resolve_expr(init, locals, globals, functions, arrays, errors);
                 if let Some(ref t) = typ {
                     if Type::from_name(&t.name).is_none() {
                         err(
@@ -585,7 +800,7 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                 let resolved = declared.or(init_type).unwrap_or(Type::I32);
                 let key = name.to_lowercase();
                 if let std::collections::hash_map::Entry::Vacant(e) = locals.entry(key) {
-                    e.insert(resolved);
+                    e.insert((resolved, *is_mut));
                 } else {
                     err(
                         errors,
@@ -595,10 +810,10 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                 }
             }
             Statement::Print { expr } => {
-                resolve_expr(expr, locals, globals, functions, errors);
+                resolve_expr(expr, locals, globals, functions, arrays, errors);
             }
             Statement::ExpressionStmt { expr } => {
-                resolve_expr(expr, locals, globals, functions, errors);
+                resolve_expr(expr, locals, globals, functions, arrays, errors);
             }
             Statement::Return { expr } => {
                 if !inside_function {
@@ -611,7 +826,7 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                 }
                 if let Some(expected) = current_ret_type {
                     if let Some(expr) = expr {
-                        let actual = resolve_expr(expr, locals, globals, functions, errors);
+                        let actual = resolve_expr(expr, locals, globals, functions, arrays, errors);
                         if let Some(a) = &actual {
                             if !types_compatible(expected, a) {
                                 err(
@@ -642,7 +857,7 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                 then_branch,
                 else_branch,
             } => {
-                let cond_type = resolve_expr(condition, locals, globals, functions, errors);
+                let cond_type = resolve_expr(condition, locals, globals, functions, arrays, errors);
                 if let Some(t) = &cond_type {
                     if t != &Type::Bool {
                         err(
@@ -658,6 +873,7 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                         &mut locals.clone(),
                         globals,
                         functions,
+                        arrays,
                         errors,
                         inside_function,
                         current_ret_type,
@@ -670,6 +886,7 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                             &mut locals.clone(),
                             globals,
                             functions,
+                            arrays,
                             errors,
                             inside_function,
                             current_ret_type,
@@ -678,7 +895,7 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                 }
             }
             Statement::While { condition, body } => {
-                let cond_type = resolve_expr(condition, locals, globals, functions, errors);
+                let cond_type = resolve_expr(condition, locals, globals, functions, arrays, errors);
                 if let Some(t) = &cond_type {
                     if t != &Type::Bool {
                         err(
@@ -694,6 +911,7 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                         &mut locals.clone(),
                         globals,
                         functions,
+                        arrays,
                         errors,
                         inside_function,
                         current_ret_type,
@@ -707,8 +925,8 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                 step,
                 body,
             } => {
-                let start_type = resolve_expr(start, locals, globals, functions, errors);
-                let end_type = resolve_expr(end, locals, globals, functions, errors);
+                let start_type = resolve_expr(start, locals, globals, functions, arrays, errors);
+                let end_type = resolve_expr(end, locals, globals, functions, arrays, errors);
                 if let (Some(s), Some(e)) = (&start_type, &end_type) {
                     if s != e && !types_compatible(s, e) && !types_compatible(e, s) {
                         err(
@@ -723,7 +941,8 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                     }
                 }
                 if let Some(step_expr) = step {
-                    let step_type = resolve_expr(step_expr, locals, globals, functions, errors);
+                    let step_type =
+                        resolve_expr(step_expr, locals, globals, functions, arrays, errors);
                     if let Some(t) = &step_type {
                         if !t.is_numeric() {
                             err(
@@ -751,13 +970,14 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                 }
                 let mut for_locals = locals.clone();
                 let loop_var_type = start_type.or(end_type).unwrap_or(Type::I32);
-                for_locals.insert(var.to_lowercase(), loop_var_type);
+                for_locals.insert(var.to_lowercase(), (loop_var_type, true));
                 for s in body {
                     walk_stmt(
                         s,
                         &mut for_locals,
                         globals,
                         functions,
+                        arrays,
                         errors,
                         inside_function,
                         current_ret_type,
@@ -770,7 +990,7 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                 body,
             } => {
                 if let Some(cond) = condition {
-                    let cond_type = resolve_expr(cond, locals, globals, functions, errors);
+                    let cond_type = resolve_expr(cond, locals, globals, functions, arrays, errors);
                     if let Some(t) = &cond_type {
                         if t != &Type::Bool {
                             err(
@@ -787,6 +1007,7 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                         &mut locals.clone(),
                         globals,
                         functions,
+                        arrays,
                         errors,
                         inside_function,
                         current_ret_type,
@@ -794,10 +1015,10 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                 }
             }
             Statement::FunctionDecl { params, body, .. } => {
-                let mut func_locals: HashMap<String, Type> = HashMap::new();
+                let mut func_locals: HashMap<String, (Type, bool)> = HashMap::new();
                 for p in params {
                     if let Some(t) = Type::from_name(&p.typ.name) {
-                        func_locals.insert(p.name.to_lowercase(), t);
+                        func_locals.insert(p.name.to_lowercase(), (t, true));
                     }
                 }
                 let ret_type = functions
@@ -809,26 +1030,133 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
                         &mut func_locals,
                         globals,
                         functions,
+                        arrays,
                         errors,
                         true,
                         ret_type.as_ref(),
                     );
                 }
             }
+            Statement::Assign { name, expr } => {
+                let key = name.to_lowercase();
+                let declared = locals.get(&key).map(|(t, _)| t).cloned();
+                if declared.is_none() {
+                    err(
+                        errors,
+                        SemanticErrorCode::E1040,
+                        format!("Assignment to undeclared variable {}", name),
+                    );
+                } else {
+                    let is_mut = locals.get(&key).map(|(_, m)| *m).unwrap_or(false);
+                    if !is_mut {
+                        err(
+                            errors,
+                            SemanticErrorCode::E1042,
+                            format!("Assignment to immutable variable {}", name),
+                        );
+                    }
+                    let expr_type = resolve_expr(expr, locals, globals, functions, arrays, errors);
+                    if let (Some(d), Some(a)) = (&declared, &expr_type) {
+                        if !types_compatible(d, a) {
+                            err(
+                                errors,
+                                SemanticErrorCode::E1041,
+                                format!(
+                                    "Type mismatch: variable {} is {} but assigned value is {}",
+                                    name,
+                                    d.to_rust_str(),
+                                    a.to_rust_str(),
+                                ),
+                            );
+                        }
+                    }
+                }
+            }
+            Statement::ArrayAssign {
+                name,
+                indices,
+                value,
+            } => {
+                let key = name.to_lowercase();
+                // Check array exists
+                let array_info = arrays.get(&key).cloned().or_else(|| {
+                    err(
+                        errors,
+                        SemanticErrorCode::E1060,
+                        format!("Unknown array {}", name),
+                    );
+                    None
+                });
+                if let Some((base_type, expected_dims)) = array_info {
+                    // Validate dimension count
+                    if indices.len() != expected_dims {
+                        err(
+                            errors,
+                            SemanticErrorCode::E1062,
+                            format!(
+                                "Array {} expects {} dimensions, got {}",
+                                name,
+                                expected_dims,
+                                indices.len()
+                            ),
+                        );
+                    }
+                    // Validate each index is integer type
+                    for (i, idx) in indices.iter().enumerate() {
+                        let idx_type =
+                            resolve_expr(idx, locals, globals, functions, arrays, errors);
+                        if let Some(t) = &idx_type {
+                            if !t.is_integer() {
+                                err(
+                                    errors,
+                                    SemanticErrorCode::E1061,
+                                    format!(
+                                        "Array index {} of {} must be integer, got {}",
+                                        i + 1,
+                                        name,
+                                        t.to_rust_str()
+                                    ),
+                                );
+                            }
+                        }
+                    }
+                    // Validate value type matches array base type
+                    let value_type =
+                        resolve_expr(value, locals, globals, functions, arrays, errors);
+                    if let Some(vt) = &value_type {
+                        if !types_compatible(&base_type, vt) {
+                            err(
+                                errors,
+                                SemanticErrorCode::E1020,
+                                format!(
+                                    "Type mismatch: array {} expects {}, got {}",
+                                    name,
+                                    base_type.to_rust_str(),
+                                    vt.to_rust_str()
+                                ),
+                            );
+                        }
+                    }
+                }
+            }
             Statement::Dim { declarations } => {
                 for decl in declarations {
                     let base_type =
                         Type::from_name(&decl.array_type.base_type.name).unwrap_or(Type::I32);
+                    let dim_count = decl.array_type.dimensions.len();
                     let key = decl.name.to_lowercase();
-                    if let std::collections::hash_map::Entry::Vacant(e) = locals.entry(key) {
-                        e.insert(base_type);
+                    if let std::collections::hash_map::Entry::Vacant(e) = locals.entry(key.clone())
+                    {
+                        e.insert((base_type.clone(), false));
                     } else {
                         err(
                             errors,
-                            SemanticErrorCode::E1003,
+                            SemanticErrorCode::E1002,
                             format!("Duplicate array variable {}", decl.name),
                         );
                     }
+                    // Also track array info for access validation
+                    arrays.insert(key, (base_type, dim_count));
                 }
             }
             Statement::OnError { .. } => {
@@ -848,13 +1176,16 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
         }
     }
 
-    // Walk top-level statements
+    // Walk top-level statements — share a persistent locals map so declarations
+    // persist across statements (e.g., LET + assignment on separate lines).
+    let mut top_locals: HashMap<String, (Type, bool)> = HashMap::new();
     for stmt in &prog.statements {
         walk_stmt(
             stmt,
-            &mut HashMap::new(),
+            &mut top_locals,
             &globals,
             &functions,
+            &mut arrays,
             &mut errors,
             false,
             None,
@@ -862,7 +1193,7 @@ pub fn analyze(prog: &Program) -> Result<(), Vec<SemanticError>> {
     }
 
     if errors.is_empty() {
-        Ok(())
+        Ok(arrays)
     } else {
         Err(errors)
     }
